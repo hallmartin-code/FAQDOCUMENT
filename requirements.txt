@@ -1,19 +1,27 @@
 # Railway builds from this file (NIXPACKS detects it). Local development uses
-# `pip install -e ".[dev,web]"` against pyproject.toml instead. Keep these pins in step
-# with the `dependencies` and `web` lists in pyproject.toml.
-anthropic>=0.40
-pydantic>=2
-pydantic-settings>=2
-typer>=0.12
-rich>=13
-pymupdf>=1.24
-pdfplumber>=0.11
-python-pptx>=1.0
-reportlab>=4.1
-python-dotenv>=1.0
-pypdf>=4.2
+# `pip install -e ".[dev,web]"` against pyproject.toml instead.
+#
+# Versions are PINNED to what the test suite and the verified end-to-end runs used.
+# Loose `>=` bounds pulled anthropic 1.0.0 (a breaking major) on the first deploy, so
+# production no longer floats. Bump these deliberately, then re-run the tests.
+#
+# NOTE: the deckpager package itself is NOT installed here — Nixpacks installs
+# requirements before copying the source, so `.` would have nothing to build. The start
+# command sets PYTHONPATH=src instead (see railway.json / Procfile).
+
+anthropic==0.125.0
+pydantic==2.13.4
+pydantic-settings==2.15.0
+typer==0.27.1
+rich==15.0.0
+pymupdf==1.28.2
+pdfplumber==0.11.10
+python-pptx==1.0.2
+reportlab==5.0.0
+python-dotenv==1.2.3
+pypdf==6.16.1
 
 # Web app only
-fastapi>=0.115
-uvicorn[standard]>=0.30
-python-multipart>=0.0.9
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+python-multipart==0.0.32
