@@ -89,14 +89,13 @@ def analyze_deck(
     for warning in deck.warnings:
         say(f"[yellow]warning:[/yellow] {warning}")
 
-    # The LLMProvider adapters land in M2 (fake) and M3 (the rest). Until then the
-    # Anthropic path runs through AnthropicAnalyzer below. Refuse any other selection
-    # rather than honouring `--provider` in `providers` but ignoring it here.
+    # Spec 4 names one LLM. `--provider` survives as a config knob for a future
+    # backend, but nothing else is wired, and honouring the flag in config while
+    # ignoring it here is the kind of silence that wastes an afternoon.
     if analyzer is None and settings.provider != "anthropic":
         raise ConfigError(
-            f"--provider {settings.provider} is not wired into the analysis pipeline yet "
-            f"(the adapters arrive in milestones M2 and M3).\n"
-            f"Run with --provider anthropic, or `deckpager providers` to see the state of each."
+            f"--provider {settings.provider} is not wired into the analysis pipeline. "
+            f"Run with --provider anthropic."
         )
 
     def _announce_retry(errors: str) -> None:

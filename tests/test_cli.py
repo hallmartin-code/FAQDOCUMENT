@@ -83,6 +83,31 @@ class TestDryRun:
         assert result.exit_code == 0
 
 
+class TestSchemaCommand:
+    def test_prints_parseable_json(self) -> None:
+        """`deckpager schema > schema.json` has to produce a usable file."""
+        import json
+
+        result = runner.invoke(app, ["schema"])
+        assert result.exit_code == 0
+        schema = json.loads(result.output)
+        assert schema["type"] == "object"
+        assert "company_name" in schema["properties"]
+
+    def test_matches_the_model_it_is_generated_from(self) -> None:
+        import json
+
+        from deckpager.models import OnePagerDraft
+
+        schema = json.loads(runner.invoke(app, ["schema"]).output)
+        assert set(schema["properties"]) == set(OnePagerDraft.model_fields)
+
+    def test_zero_indent_prints_one_line(self) -> None:
+        result = runner.invoke(app, ["schema", "--indent", "0"])
+        assert result.exit_code == 0
+        assert len(result.output.strip().splitlines()) == 1
+
+
 class TestExitCodes:
     def test_a_missing_deck_is_bad_input(self, tmp_path: Path) -> None:
         result = runner.invoke(app, ["render", str(tmp_path / "absent.pdf"), "--dry-run"])

@@ -83,7 +83,7 @@ class TestPrecedence:
         message = str(excinfo.value)
         assert "gpt5" in message
         assert "anthropic" in message and "fake" in message
-        assert "deckpager providers" in message
+        assert "anthropic" in message
 
 
 class TestApiKeys:

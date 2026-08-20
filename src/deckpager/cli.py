@@ -183,37 +183,20 @@ def redraw(
         _fail(exc)
 
 @app.command()
-def providers(model: ModelOpt = None) -> None:
-    """List the configured LLM backends and check whether each is usable."""
-    from rich.table import Table
+def schema(
+    indent: Annotated[
+        int,
+        typer.Option("--indent", help="JSON indentation. 0 prints one line."),
+    ] = 2,
+) -> None:
+    """Print the JSON schema the model is held to when extracting a one-pager."""
+    import json
 
-    from deckpager.config import load_settings
-    from deckpager.llm.registry import describe_all
+    from deckpager.models import tool_schema
 
-    try:
-        settings = load_settings(model=model)
-        statuses = describe_all(settings)
-    except DeckpagerError as exc:
-        _fail(exc)
-        return
-
-    table = Table(box=None, pad_edge=False, header_style="bold")
-    table.add_column("")
-    table.add_column("provider")
-    table.add_column("model")
-    table.add_column("status")
-    for status in statuses:
-        mark = "[green]OK[/green]" if status.ready else "[yellow]--[/yellow]"
-        detail = status.detail
-        if status.notes:
-            detail = f"{detail} [dim]({'; '.join(status.notes)})[/dim]"
-        name = f"[bold]{status.name}[/bold]" if "selected" in status.notes else status.name
-        table.add_row(mark, name, status.model or "-", detail)
-    console.print(table)
-    console.print(
-        f"\n[dim]Selected: {settings.provider} (--provider > DECKPAGER_PROVIDER > "
-        f"config/default.toml). Vision-capable backends attach slide images.[/dim]"
-    )
+    # print(), not console.print(): this is machine output. Rich would wrap long lines
+    # and colour the punctuation, and `deckpager schema > schema.json` has to work.
+    print(json.dumps(tool_schema(), indent=indent or None))
 
 
 @app.command()
@@ -262,7 +245,6 @@ def check() -> None:
         raise typer.Exit(code=EXIT_CONFIG)
     console.print()
     console.print("[green]Ready.[/green]")
-
 
 @app.command()
 def version() -> None:

@@ -179,7 +179,7 @@ def load_settings(
             raise ConfigError(
                 f"Unknown provider {provider!r}.\n"
                 f"Choose one of: {valid}.\n"
-                f"Run `deckpager providers` to see which are configured on this machine."
+                f"Only `anthropic` is wired; the others are placeholders."
             )
         overrides["provider"] = provider
     if model is not None:

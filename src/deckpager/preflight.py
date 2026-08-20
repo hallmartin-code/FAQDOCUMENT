@@ -153,6 +153,28 @@ def check_soffice() -> CheckResult:
     return CheckResult("libreoffice (.ppt support)", Status.OK, found)
 
 
+def check_cache() -> CheckResult:
+    """Report where extractions are cached, and whether that directory is writable.
+
+    Worth printing even when it is fine: what lands there is derived from confidential
+    decks, so an operator should be able to see the path without reading the source.
+    """
+    from deckpager.cache import CACHE_DIR_ENV, ExtractionCache
+
+    cache = ExtractionCache()
+    entries = len(list(cache.root.glob("*/*.json"))) if cache.root.is_dir() else 0
+    probe = cache.put("preflight" + "0" * 55, {"probe": True})
+    if not probe:
+        return CheckResult(
+            "extraction cache",
+            Status.WARN,
+            f"{cache.root} is not writable; every run will pay for extraction",
+            f"Point {CACHE_DIR_ENV} at a writable directory.",
+        )
+    cache.path_for("preflight" + "0" * 55).unlink(missing_ok=True)
+    return CheckResult("extraction cache", Status.OK, f"{cache.root} ({entries} entries)")
+
+
 def check_data_dirs() -> list[CheckResult]:
     """The analyst-editable config/ and prompts/ directories must be locatable."""
     results: list[CheckResult] = []
@@ -170,6 +192,7 @@ def run_checks(settings: Settings) -> list[CheckResult]:
         check_python(),
         check_api_key(settings),
         *check_data_dirs(),
+        check_cache(),
         check_reportlab(),
         check_weasyprint(),
         check_soffice(),
