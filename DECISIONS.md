@@ -432,3 +432,75 @@ failure path: the router recognizes the OLE2 header, refuses an .xls wearing the
 header, and the missing-soffice error names the install command for the running platform.
 The conversion itself is untested. It should be run against a real .ppt before anyone
 relies on it.
+
+---
+
+## deckpager Phase 2 - Schema and cache
+
+### DP15. The Field wrapper is written with Generic, not the syntax the spec shows
+
+Spec 6 writes the wrapper as a PEP 695 generic class. That syntax is a SyntaxError
+before Python 3.12, and spec 3 sets the floor at 3.11. The TypeVar form produces an
+identical model and an identical JSON schema, so the spec is met in substance on every
+interpreter it claims to support. Switch the day the floor moves to 3.12.
+
+### DP16. The model fills a draft; the pipeline stamps the provenance
+
+OnePagerDraft is the tool contract. OnePager is a draft plus a Provenance block. The
+split exists because spec 6 lists token counts, cost, and the source filename among the
+fields, and those are things this code measures exactly. Putting them in the tool schema
+would invite the model to invent numbers we already know - the precise failure that
+spec 3 is written to prevent.
+
+### DP17. Money is parsed, foreign currency is noted, and nothing is ever converted
+
+The prompt asks for integer USD. When a model hands back a money string instead,
+MoneyField parses it rather than burning a correction retry on a value that is perfectly
+legible. A string that does not parse to a single amount becomes null at zero confidence
+- never a midpoint, never a guess. A range is not a number.
+
+A non-USD amount keeps its stated value and gains a note naming the currency, per spec 8.
+Converting would require an exchange rate for the day the deck was written, which is not
+in the deck; the converted figure would appear nowhere in the source and would be exactly
+the kind of fabrication the whole design is built to refuse.
+
+### DP18. Exactly three strengths and three risks, enforced strictly
+
+Spec 6 says exactly three of each, so the list constraint rejects two as firmly as four.
+This is the one limit likely to cost a correction retry in practice - a model that finds
+only two specific risks would rather say so. Loosening it to a maximum would be quieter
+and would also let the analyst block render short and ragged, so the strict reading
+stands. Revisit if Phase 3 shows retries being spent on it.
+
+### DP19. The cache key covers everything that steers the answer
+
+Deck bytes, model ID, the prompt, the tool schema, and the ingest budgets that decide
+which slides the model sees. Change any one and the key changes. The deck is keyed by
+content hash rather than path or mtime, so the same deck re-sent under a new filename
+hits, and a file touched by a sync client does not miss.
+
+Every fault is a miss: unreadable directory, truncated record, record from an older
+format, record that is not an object. A cache that can break a run is a liability, and
+the cost of a miss is one extraction.
+
+What lands on disk is derived from a confidential deck, so it goes to the platform user
+cache directory rather than the project or the deck folder. The check command prints the
+path and the entry count so nobody has to read the source to find it.
+
+### DP20. The schema command prints through print, not rich
+
+It is machine output. Redirecting it to a file has to produce something parseable, and
+rich would wrap long lines and colour the punctuation. An indent of 0 gives one line.
+
+### DP21. The unwired provider seam is gone (resolves DP7)
+
+src/deckpager/llm/ and the providers command have been deleted, with the test module
+that covered them. Nothing imported the package outside itself and its own tests: the
+wired-provider set was empty, so get_provider refused every backend including the fake
+one, and its last branch imported a module that was never written. Coverage put
+llm/fake.py at 0 percent.
+
+The live path is analysis/client.py, and spec 4 names one LLM. The provider setting
+survives as a config knob with a pipeline guard that refuses anything but anthropic,
+which is honest about the state of things; removing the field as well would touch config
+precedence tests for no gain today.

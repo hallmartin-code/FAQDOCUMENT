@@ -342,7 +342,10 @@ is the unmodified fork, so `git log` separates inherited code from deckpager's o
    accepts a PDF wholesale, which preserves charts and layout better than re-flattening pages
    to JPEG. The §7 rasterization pipeline is the documented fallback for decks over the API's
    page/size limits.
-3. **Default model is `claude-opus-5`, not `claude-sonnet-4-6`** (§8). Set in
+3. **The `Field[T]` wrapper uses `Generic[T]`** (§6). The `class Field[T]` syntax the spec
+   shows is a SyntaxError before Python 3.12, and §3 sets the floor at 3.11. Same model,
+   same generated schema.
+4. **Default model is `claude-opus-5`, not `claude-sonnet-4-6`** (§8). Set in
    `config/default.toml`; override with `--model` or `DECKPAGER_MODEL`.
 
-**Phase status:** Phases 0 and 1 complete. Phase 2 (models, schema, cache) next.
+**Phase status:** Phases 0, 1, and 2 complete. Phase 3 (extraction against the real API) next.
