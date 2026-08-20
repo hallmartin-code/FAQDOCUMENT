@@ -1,6 +1,6 @@
 """The one-pager template is a contract, not documentation.
 
-`templates/onepager.md` states the fixed vocabularies the renderer will lay out. If the
+`templates/legacy_onepager.md` states the fixed vocabularies the renderer will lay out. If the
 framework changes in `schema.py` or `weights.toml` and the template is not updated, the
 renderer gets built against a stale field map — so the drift is caught here instead.
 """
@@ -15,7 +15,7 @@ import pytest
 from deckpager.analysis.schema import RISK_ORDER, SCORECARD_ORDER
 from deckpager.config import load_weights
 
-TEMPLATE = Path(__file__).resolve().parents[1] / "templates" / "onepager.md"
+TEMPLATE = Path(__file__).resolve().parents[1] / "templates" / "legacy_onepager.md"
 
 #: The five risk categories the one-pager has room for. The other two are assessed and
 #: stored, and appear in the --full memo; see the template's §4.2.

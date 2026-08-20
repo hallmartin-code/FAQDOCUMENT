@@ -642,3 +642,39 @@ Spec 9 asks for metric tiles, which implies numerals. Real extractions do not ob
 the schema allows a 120-character value and AccuBreath returned `Working device:
 feasibility and functionality proven`. Setting that at display size clipped it mid-word.
 A tile now uses display size for something numeral-shaped and body size for a sentence.
+
+---
+
+## deckpager Phase 4b - The document structure template
+
+### DP36. The template is a contract, and a test enforces it
+
+templates/onepager.md states the document structure the app generates: the five bands,
+the field map with every limit, the closed vocabularies, the palette, the type scale, and
+the reduction ladder. It is company-agnostic - placeholders only, no deck, no company, no
+run.
+
+tests/test_template.py checks it against models.py, style.py, and onepager.py rather than
+trusting it. Every extracted field must appear in the field map, the palette hexes and
+type sizes must be the ones in style.py, the stage vocabulary must match the Literal, and
+the ladder table must state the same caps the code starts from. Changing the accent colour
+without updating the template fails the suite - verified by doing it.
+
+A template that is only documentation goes stale in a month and then quietly misleads the
+next person who builds against it.
+
+### DP37. Three extracted fields have nowhere to go, and the template says so
+
+founded_year, sub_sector, and min_check_usd are extracted, validated, and written to the
+JSON, but spec 9 gives them no place on the page. Rather than leave that as an accident,
+4.7 names them, RENDERED_FIELDS excludes them, and a test asserts the two lists partition
+the schema exactly. Adding one to the layout is now a change that cannot be made in only
+one place.
+
+It is also a question for the operator: three fields are being paid for and not shown.
+
+### DP38. The legacy template moved aside with its renderer
+
+The inherited templates/onepager.md described the Assessment document, not this one. It
+became legacy_onepager.md alongside legacy_onepager.py and legacy_theme.py, and its test
+became test_legacy_template_spec.py. All four go together in Phase 5.

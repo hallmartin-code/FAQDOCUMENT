@@ -1,0 +1,21 @@
+docs: the one-pager document structure template
+
+templates/onepager.md is the company-agnostic structure contract for every one-pager the
+app generates: five bands, the full field map with every schema limit, the closed stage
+vocabulary, the palette and type scale, the rendering rules for nulls and low confidence,
+the seventeen-rung reduction ladder, and a validation checklist.
+
+tests/test_template.py enforces it against models.py, style.py, and onepager.py. Every
+extracted field must appear in the map; the palette hexes, type sizes, band heights, and
+column split must be the ones in style.py; the stage vocabulary must match the Literal;
+the ladder table must state the caps the code starts from. A template that is only
+documentation goes stale and then misleads.
+
+4.7 names the three fields that are extracted but have no place on the page -
+founded_year, sub_sector, min_check_usd - and a test asserts that the rendered and
+unrendered lists partition the schema exactly.
+
+The inherited Assessment template becomes legacy_onepager.md, with its test, to go with
+the legacy renderer in Phase 5.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
