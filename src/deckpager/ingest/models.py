@@ -80,7 +80,7 @@ class Deck(BaseModel):
     """A pitch deck, normalized across source formats."""
 
     source_path: Path
-    source_format: Literal["pdf", "pptx", "ppt"]
+    source_format: Literal["pdf", "pptx", "ppt", "docx"]
     slides: list[Slide] = Field(default_factory=list)
     raw_pdf_b64: str | None = Field(
         default=None,

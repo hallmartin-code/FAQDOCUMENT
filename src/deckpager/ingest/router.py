@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import zipfile
 from pathlib import Path
 
 from deckpager.errors import IngestError, UnsupportedFormatError
+from deckpager.ingest.docx import load_docx
 from deckpager.ingest.legacy_ppt import load_ppt
 from deckpager.ingest.models import Deck, Slide
 from deckpager.ingest.pdf import load_pdf
@@ -12,7 +14,7 @@ from deckpager.ingest.pptx import load_pptx
 
 #: File types the ingest layer accepts. Exported so the CLI, the error messages below, and
 #: any future upload gate all state the same set — three hardcoded copies would drift.
-SUPPORTED_SUFFIXES: frozenset[str] = frozenset({".pdf", ".pptx", ".ppt"})
+SUPPORTED_SUFFIXES: frozenset[str] = frozenset({".pdf", ".pptx", ".ppt", ".docx"})
 
 #: Spec §7 budgets: at most 40 slides in a request, images for the first 25 of them.
 DEFAULT_MAX_SLIDES = 40
@@ -34,9 +36,27 @@ def _sniff(path: Path) -> str:
     if head.startswith(PDF_MAGIC):
         return "pdf"
     if head.startswith(ZIP_MAGIC):
-        return "pptx"
+        return _sniff_zip(path)
     if head.startswith(OLE2_MAGIC):
         return "ppt"
+    return "unknown"
+
+
+def _sniff_zip(path: Path) -> str:
+    """Tell an OOXML container apart by what is inside it.
+
+    PPTX and DOCX are both ZIPs with identical magic bytes, so the header alone cannot
+    choose between them — the part names can.
+    """
+    try:
+        with zipfile.ZipFile(path) as archive:
+            names = set(archive.namelist())
+    except (zipfile.BadZipFile, OSError):
+        return "unknown"
+    if "ppt/presentation.xml" in names:
+        return "pptx"
+    if "word/document.xml" in names:
+        return "docx"
     return "unknown"
 
 
@@ -151,7 +171,7 @@ def load_deck(
 
     if sniffed == "unknown":
         raise UnsupportedFormatError(
-            f"{path.name} is not a PDF, PPTX, or PPT (unrecognized file header). "
+            f"{path.name} is not a PDF, PPTX, PPT, or DOCX (unrecognized file header). "
             f"Supported formats: {_supported()}"
         )
     if suffix in SUPPORTED_SUFFIXES and _expected_magic(suffix) != sniffed:
@@ -159,15 +179,15 @@ def load_deck(
             f"{path.name} has a {suffix} extension but its contents are {sniffed.upper()}. "
             f"Rename or re-export the file so the extension matches."
         )
-    if suffix not in SUPPORTED_SUFFIXES and sniffed in ("pptx", "ppt"):
-        # A bare ZIP or OLE2 header is ambiguous — .docx and .xls share them. Only trust
-        # the header when the extension agrees.
-        container = "ZIP archive" if sniffed == "pptx" else "legacy Office document"
+    if suffix not in SUPPORTED_SUFFIXES and sniffed in ("pptx", "ppt", "docx"):
+        # An OLE2 header stays ambiguous — .xls and .doc share it with .ppt. The OOXML
+        # containers no longer are: _sniff_zip has read the part names.
+        container = "Office document" if sniffed != "ppt" else "legacy Office document"
         raise UnsupportedFormatError(
             f"{path.name} looks like a {container}. Supported formats: {_supported()}"
         )
 
-    loaders = {"pdf": load_pdf, "pptx": load_pptx, "ppt": load_ppt}
+    loaders = {"pdf": load_pdf, "pptx": load_pptx, "ppt": load_ppt, "docx": load_docx}
     deck = loaders[sniffed](path, want_images=want_images)
     return apply_caps(
         deck,
@@ -184,4 +204,4 @@ def _supported() -> str:
 
 def _expected_magic(suffix: str) -> str:
     """Map a supported suffix to the format its magic bytes should report."""
-    return {".pdf": "pdf", ".pptx": "pptx", ".ppt": "ppt"}[suffix]
+    return {".pdf": "pdf", ".pptx": "pptx", ".ppt": "ppt", ".docx": "docx"}[suffix]

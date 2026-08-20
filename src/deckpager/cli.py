@@ -125,7 +125,7 @@ def _print_deck_summary(deck: Deck) -> None:
 
     header = (
         f"[bold]{deck.source_path.name}[/bold]  ·  {deck.source_format.upper()}  ·  "
-        f"{deck.slide_count} slides"
+        f"{deck.slide_count} {'sections' if deck.source_format == 'docx' else 'slides'}"
     )
     if deck.raw_pdf_b64 is not None:
         header += "  ·  sent natively as a PDF document"

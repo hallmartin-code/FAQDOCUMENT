@@ -7,6 +7,8 @@ failing deck fails the job rather than the process.
 
 from __future__ import annotations
 
+import re
+
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -24,8 +26,17 @@ def api_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[TestClient]:
-    """A client whose jobs land in a scratch directory."""
+    """A client whose jobs land in a scratch directory, with email off by default.
+
+    RESEND_API_KEY is cleared deliberately: once a real key lives in the developer's
+    .env, an inherited one silently flips the page into "email configured" mode and the
+    unconfigured-deployment tests assert against a deployment that no longer exists.
+    """
     monkeypatch.setenv("JOBS_DIR", str(tmp_path / "jobs"))
+    # An empty value, not a deleted one: Settings also reads .env, which the deleted
+    # variable would not shadow. An explicit empty env var outranks the file and reads
+    # as "no key" to email_enabled.
+    monkeypatch.setenv("RESEND_API_KEY", "")
     import importlib
 
     import app as app_module
@@ -333,11 +344,21 @@ class TestIndexPage:
         for suffix in (".pdf", ".pptx", ".ppt"):
             assert suffix in html
 
-    def test_the_page_does_not_advertise_a_format_the_router_rejects(
+    def test_the_page_advertises_exactly_what_the_router_accepts(
         self, client: TestClient
     ) -> None:
-        """The design mock offered .docx; the ingest layer has never accepted it."""
-        assert ".docx" not in client.get("/").text
+        """A page offering a type the router refuses wastes an upload and a partner's time.
+
+        Written when .docx was refused and the design mock offered it anyway. Now that the
+        ingest layer accepts .docx, the assertion is the invariant rather than the list:
+        the page and the router agree, whatever the set happens to be.
+        """
+        from deckpager.ingest.router import SUPPORTED_SUFFIXES
+
+        html = client.get("/").text
+        advertised = re.search(r'accept="([^"]*)"', html)
+        assert advertised is not None
+        assert set(advertised.group(1).split(",")) == set(SUPPORTED_SUFFIXES)
 
     def test_every_placeholder_is_substituted(self, client: TestClient) -> None:
         html = client.get("/").text

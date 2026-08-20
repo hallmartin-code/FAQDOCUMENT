@@ -134,7 +134,7 @@ class TestRouter:
     def test_rejects_unknown_format(self, tmp_path: Path) -> None:
         notes = tmp_path / "notes.txt"
         notes.write_text("just some text", encoding="utf-8")
-        with pytest.raises(UnsupportedFormatError, match="not a PDF, PPTX, or PPT"):
+        with pytest.raises(UnsupportedFormatError, match="not a PDF, PPTX, PPT, or DOCX"):
             load_deck(notes)
 
     def test_rejects_extension_content_mismatch(self, sample_pdf: Path, tmp_path: Path) -> None:

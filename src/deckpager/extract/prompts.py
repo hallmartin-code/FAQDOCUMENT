@@ -71,6 +71,16 @@ def system_blocks() -> list[dict[str, Any]]:
     return [{"type": "text", "text": SYSTEM_PROMPT}]
 
 
+def unit_label(deck: Deck) -> str:
+    """What one indexed piece of this source is called.
+
+    A Word document has no slides, and calling its sections "slides" in the payload
+    invites the model to cite page numbers that do not exist. The schema field is still
+    `source_slides` — the instruction below says plainly what the numbers refer to.
+    """
+    return "SECTION" if deck.source_format == "docx" else "SLIDE"
+
+
 def slide_text(deck: Deck) -> str:
     """The deck as text, one delimited section per slide (spec §8).
 
@@ -78,12 +88,13 @@ def slide_text(deck: Deck) -> str:
     citation the model makes is a slide number, so the numbers have to be unmissable in
     the payload it reads.
     """
+    unit = unit_label(deck)
     sections: list[str] = []
     for slide in deck.slides:
-        parts = [f"--- SLIDE {slide.index} ---"]
+        parts = [f"--- {unit} {slide.index} ---"]
         if slide.has_chart:
             parts.append("[this slide contains a chart]")
-        parts.append(slide.text or "[no extractable text on this slide]")
+        parts.append(slide.text or f"[no extractable text on this {unit.lower()}]")
         if slide.speaker_notes:
             parts.append(f"[speaker notes] {slide.speaker_notes}")
         sections.append("\n".join(parts))
@@ -115,7 +126,9 @@ def build_user_blocks(deck: Deck) -> list[dict[str, Any]]:
         for slide in deck.slides:
             if slide.asset is None:
                 continue
-            blocks.append({"type": "text", "text": f"--- SLIDE {slide.index} (image) ---"})
+            blocks.append(
+                {"type": "text", "text": f"--- {unit_label(deck)} {slide.index} (image) ---"}
+            )
             blocks.append(
                 {
                     "type": "image",
@@ -127,13 +140,26 @@ def build_user_blocks(deck: Deck) -> list[dict[str, Any]]:
                 }
             )
 
-    instruction = (
-        f"Here is {deck.source_path.name}, a {deck.slide_count}-slide pitch deck. "
-        f"The extracted text of every slide follows. Read it together with the attached "
-        f"pages, then call `{TOOL_NAME}` exactly once with the one-page summary.\n\n"
-        f"{LANGUAGE_RULE}"
-        f"\n\n{slide_text(deck)}"
-    )
+    if deck.source_format == "docx":
+        # A memo is not a deck. Told it is one, the model hunts for slides that do not
+        # exist and cites numbers a reader cannot locate.
+        instruction = (
+            f"Here is {deck.source_path.name}, a written document (an executive summary, "
+            f"memo, or similar), split into {deck.slide_count} numbered sections at its "
+            f"headings. It is not a slide deck. Record section numbers in `source_slides` "
+            f"- that field carries whatever unit this source is numbered in. Then call "
+            f"`{TOOL_NAME}` exactly once with the one-page summary.\n\n"
+            f"{LANGUAGE_RULE}"
+            f"\n\n{slide_text(deck)}"
+        )
+    else:
+        instruction = (
+            f"Here is {deck.source_path.name}, a {deck.slide_count}-slide pitch deck. "
+            f"The extracted text of every slide follows. Read it together with the attached "
+            f"pages, then call `{TOOL_NAME}` exactly once with the one-page summary.\n\n"
+            f"{LANGUAGE_RULE}"
+            f"\n\n{slide_text(deck)}"
+        )
     blocks.append({"type": "text", "text": instruction})
     return blocks
 

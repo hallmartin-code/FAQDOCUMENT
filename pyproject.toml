@@ -20,6 +20,7 @@ dependencies = [
     "pymupdf>=1.24",         # PDF page rasterization
     "pdfplumber>=0.11",      # PDF text and table extraction
     "python-pptx>=1.0",      # PPTX text/notes extraction
+    "python-docx>=1.1",      # DOCX section/table extraction
     "reportlab>=4.1",        # PDF rendering (default engine)
     "python-dotenv>=1.0",    # .env loading for the CLI
 ]
