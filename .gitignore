@@ -1,0 +1,19 @@
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# secrets
+.env
+
+# deckpager
+.deckpager-cache/
+*-onepager.pdf
