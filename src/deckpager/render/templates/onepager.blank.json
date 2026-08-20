@@ -1,0 +1,65 @@
+{
+  "_comment": "Blank OnePager skeleton. Every analysed field, in render order, with empty values. Structure only - no company data. Each wrapped field is {value, confidence, source_slides, note}; confidence 0.0 and value null mean 'not supported by the deck'.",
+
+  "company_name":            { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "tagline":                 { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "website":                 { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "hq_location":             { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "founded_year":            { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "sector":                  { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "sub_sector":              { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "stage":                   { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+
+  "raise_amount_usd":        { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "pre_money_valuation_usd": { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "instrument":              { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "amount_committed_usd":    { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "min_check_usd":           { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "close_date":              { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+
+  "problem":                 { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "solution":                { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "business_model":          { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "go_to_market":            { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "use_of_funds":            { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+
+  "traction_metrics": {
+    "value": null,
+    "confidence": 0.0,
+    "source_slides": [],
+    "note": null,
+    "_item_shape": { "label": null, "value": null, "period": null, "source_slide": null },
+    "_max_items": 6,
+    "_priority": ["revenue", "growth rate", "customers", "retention", "pipeline", "partnerships"]
+  },
+
+  "tam_usd":                 { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "sam_usd":                 { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "som_usd":                 { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+  "market_note":             { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+
+  "team": {
+    "value": null,
+    "confidence": 0.0,
+    "source_slides": [],
+    "note": null,
+    "_item_shape": { "name": null, "role": null, "background": null },
+    "_max_items": 4,
+    "_order": "founders first"
+  },
+
+  "competitors":             { "value": null, "confidence": 0.0, "source_slides": [], "note": null, "_max_items": 5 },
+  "differentiation":         { "value": null, "confidence": 0.0, "source_slides": [], "note": null },
+
+  "key_strengths":           { "value": null, "confidence": 0.0, "source_slides": [], "note": null, "_exact_items": 3 },
+  "key_risks":               { "value": null, "confidence": 0.0, "source_slides": [], "note": null, "_exact_items": 3 },
+  "missing_information":     { "value": null, "confidence": 0.0, "source_slides": [], "note": null, "_max_items": 5 },
+
+  "source_filename": null,
+  "source_page_count": null,
+  "extracted_at": null,
+  "model": null,
+  "input_tokens": null,
+  "output_tokens": null,
+  "estimated_cost_usd": null
+}
