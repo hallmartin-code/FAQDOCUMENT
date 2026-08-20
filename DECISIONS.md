@@ -504,3 +504,64 @@ The live path is analysis/client.py, and spec 4 names one LLM. The provider sett
 survives as a config knob with a pipeline guard that refuses anything but anthropic,
 which is honest about the state of things; removing the field as well would touch config
 precedence tests for no gain today.
+
+---
+
+## deckpager Phase 3 - Extraction
+
+### DP22. extract/ is a new package beside analysis/, not a rewrite of it
+
+analysis/ is the inherited path and still speaks the old Assessment schema, which the
+old renderer needs. extract/ speaks OnePager. They coexist for two phases; Phase 5 wires
+the new renderer and deletes the old pair. Rewriting analysis/ in place would have meant
+a half-migrated module that neither schema could rely on.
+
+### DP23. A transitional extract command
+
+Spec 13 asks for the raw JSON to be reviewed before a renderer exists to hide it, and
+spec 10 has no extract command. So there is one now, documented in its own help text as
+transitional, and Phase 5 folds it into render. The alternative - pointing render at the
+new pipeline and having it announce that PDFs arrive in two phases - is a worse thing to
+hand someone.
+
+### DP24. Two retry mechanisms, deliberately not the same one
+
+Transport failures (429, 5xx, dropped connections) are retried by the SDK with
+exponential backoff and Retry-After handling, configured to spec 8 four attempts via
+max_retries=3. A schema violation is not a transport failure: the API succeeded and the
+model was wrong, so it gets exactly one correction turn carrying the pydantic errors as
+a tool_result, and then the run fails loudly with both reports.
+
+### DP25. The correction retry resends the whole deck, and that is most of what it costs
+
+Measured on the AccuBreath deck: 123,863 input tokens for a run that should have been
+about 62,000, because the retry resends the document block. The retry roughly doubles
+the input cost of a run, and input is nearly all of the cost on a 30-page deck.
+
+A cache_control breakpoint on the document block would make the retry read cached input
+at a tenth of the price. It is not on, because it is not free: a cache write costs 1.25x,
+so on the runs that do not retry it is a 25 percent input premium. One deck is not enough
+evidence about how often the retry fires. Revisit once more decks have gone through.
+
+The system prompt is not marked cacheable either, and that is a bug that was there and is
+now fixed: at roughly 348 tokens it is a third of the minimum cacheable prefix, so the
+breakpoint would silently never have cached anything.
+
+### DP26. What the first real run actually broke on (DP18 was wrong)
+
+DP18 predicted the exactly-three rule on strengths and risks would be the limit that
+cost a correction retry. It was not. The first run against a real deck failed validation
+on four 90-character overruns - one strength and all three risks - and passed the
+exactly-three rule cleanly. The 90-character cap is the tight one, because a specific
+risk about this company is hard to state in 90 characters.
+
+The limits stay as specified: they exist so the analyst block fits the page, and the
+correction turn is the mechanism for enforcing them. Worth watching whether the retry
+fires on this for most decks, in which case the cost in DP25 argues for either a longer
+cap or an explicit instruction in the prompt.
+
+### DP27. An unknown model reports no cost rather than a wrong one
+
+PRICING is a local table, and a local price table cannot help going stale. A model that
+is not in it gets estimated_cost_usd of None and a cost line that says so, instead of a
+confident number computed from a rate that may have changed.
