@@ -49,6 +49,17 @@ not appear to be a pitch deck" as the only entry in missing_information.\
 """
 
 
+#: Spec 11 requires a non-English deck to be processed normally, with the language
+#: recorded in missing_information. Spec 8 freezes the system prompt and says nothing
+#: about language, so the instruction goes in the user message instead: the two sections
+#: are only satisfiable together if it lives in the half that is not verbatim.
+LANGUAGE_RULE = (
+    "If this deck is not written in English, analyze it exactly as you would an English "
+    "deck, write the summary in English, and add one entry to missing_information naming "
+    "the language, in the form: Deck is written in <language>; figures and claims were "
+    "read in translation."
+)
+
 def system_blocks() -> list[dict[str, Any]]:
     """The system prompt as content blocks.
 
@@ -120,7 +131,8 @@ def build_user_blocks(deck: Deck) -> list[dict[str, Any]]:
         f"Here is {deck.source_path.name}, a {deck.slide_count}-slide pitch deck. "
         f"The extracted text of every slide follows. Read it together with the attached "
         f"pages, then call `{TOOL_NAME}` exactly once with the one-page summary.\n\n"
-        f"{slide_text(deck)}"
+        f"{LANGUAGE_RULE}"
+        f"\n\n{slide_text(deck)}"
     )
     blocks.append({"type": "text", "text": instruction})
     return blocks

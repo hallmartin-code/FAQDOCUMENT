@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from reportlab.lib.pagesizes import A4, letter
 from reportlab.lib.utils import simpleSplit
@@ -23,6 +23,9 @@ from reportlab.pdfgen.canvas import Canvas
 from deckpager.errors import RenderError
 from deckpager.models import DEFAULT_MIN_CONFIDENCE, Field, Metric, OnePager, TeamMember
 from deckpager.render import style as s
+
+if TYPE_CHECKING:  # pragma: no cover - the Protocol lives in base, which imports us
+    from deckpager.render.base import Renderer
 
 Paper = Literal["letter", "a4"]
 
@@ -908,7 +911,7 @@ def fit_and_render(
     *,
     paper: Paper = "letter",
     threshold: float = DEFAULT_MIN_CONFIDENCE,
-    renderer: OnePagerRenderer | None = None,
+    renderer: Renderer | None = None,
 ) -> tuple[Path, list[str]]:
     """Reduce until the content fits, then render once. Returns the file and what was cut.
 
@@ -917,7 +920,9 @@ def fit_and_render(
     written to disk. If every rung is spent and it still overflows, that is an error — a
     two-page one-pager is the silent failure this exists to prevent.
     """
-    engine = renderer or OnePagerRenderer()
+    from deckpager.render.base import default_engine
+
+    engine = renderer or default_engine()
 
     def measure(candidate: PageLayout) -> float:
         return engine.overflow(one_pager, candidate, paper=paper, threshold=threshold)

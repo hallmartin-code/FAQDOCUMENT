@@ -15,7 +15,8 @@ from deckpager import __version__
 from deckpager.errors import EXIT_BAD_INPUT, DeckpagerError
 from deckpager.ingest.models import Deck
 from deckpager.models import DEFAULT_MIN_CONFIDENCE
-from deckpager.pipeline import RunResult
+from deckpager.pipeline import BatchEntry, RunResult
+from deckpager.render.base import get_engine
 from deckpager.render.onepager import PAGE_SIZES, RENDERED_FIELDS, Paper
 
 # Windows consoles still default to a legacy code page, which turns the em-dashes and
@@ -63,6 +64,13 @@ DryRunOpt = Annotated[
     typer.Option(
         "--dry-run",
         help="Parse the deck and print what was read. No model call, no cost.",
+    ),
+]
+EngineOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--engine",
+        help="Render engine: reportlab (default) or weasyprint.",
     ),
 ]
 NoEmailOpt = Annotated[
@@ -177,6 +185,7 @@ def render(
         typer.Option("--min-confidence", help="Below this, a field is flagged."),
     ] = DEFAULT_MIN_CONFIDENCE,
     no_images: NoImagesOpt = False,
+    engine: EngineOpt = None,
     no_email: NoEmailOpt = False,
     dry_run: DryRunOpt = False,
     verbose: Annotated[
@@ -207,6 +216,7 @@ def render(
             on_stage=lambda name: console.print(f"[dim]{name}[/dim] {deck.name}"),
             on_retry=_announce_schema_retry,
             send_email=not no_email,
+            engine=engine or "reportlab",
         )
     except DeckpagerError as exc:
         if verbose:
@@ -246,6 +256,101 @@ def _report(result: RunResult, min_confidence: float) -> None:
         else:
             err_console.print(f"[yellow]email:[/yellow] {escape(result.email.detail)}")
     console.print(f"[dim]{result.summary}[/dim]")
+
+@app.command()
+def batch(
+    directory: Annotated[
+        Path, typer.Argument(help="Directory of decks. Not searched recursively.")
+    ],
+    out_dir: Annotated[
+        Path,
+        typer.Option("--out-dir", help="Where the one-pagers are written."),
+    ],
+    concurrency: Annotated[
+        int,
+        typer.Option("--concurrency", help="How many decks to analyze at once."),
+    ] = 3,
+    model: ModelOpt = None,
+    paper: PaperOpt = "letter",
+    min_confidence: Annotated[
+        float,
+        typer.Option("--min-confidence", help="Below this, a field is flagged."),
+    ] = DEFAULT_MIN_CONFIDENCE,
+    no_cache: NoCacheOpt = False,
+    no_images: NoImagesOpt = False,
+    engine: EngineOpt = None,
+    no_email: NoEmailOpt = False,
+) -> None:
+    """Analyze every deck in a directory. One bad deck never stops the others."""
+    from rich.table import Table
+
+    from deckpager.config import load_settings
+    from deckpager.pipeline import run_batch
+
+    try:
+        settings = load_settings(model=model, no_images=no_images)
+        report = run_batch(
+            directory,
+            settings=settings,
+            out_dir=out_dir,
+            concurrency=concurrency,
+            paper=_paper(paper),
+            min_confidence=min_confidence,
+            use_cache=not no_cache,
+            send_email=not no_email,
+            engine=engine or "reportlab",
+            on_start=lambda deck: console.print(f"[dim]start[/dim] {deck.name}"),
+            on_finish=_announce_batch_entry,
+        )
+    except DeckpagerError as exc:
+        _fail(exc)
+        return
+
+    table = Table(box=None, pad_edge=False, header_style="bold")
+    table.add_column("")
+    table.add_column("deck")
+    table.add_column("company")
+    table.add_column("note")
+    for entry in report.entries:
+        if entry.result is None:
+            table.add_row(
+                "[red]XX[/red]", escape(entry.deck.name), "-", escape(entry.error or "")
+            )
+            continue
+        one_pager = entry.result.one_pager
+        notes = []
+        if entry.result.truncations:
+            notes.append(f"{len(entry.result.truncations)} fitted")
+        if not one_pager.is_pitch_deck:
+            notes.append("not a pitch deck")
+        table.add_row(
+            "[green]OK[/green]",
+            escape(entry.deck.name),
+            escape(one_pager.company_name.value or "-"),
+            escape(", ".join(notes)),
+        )
+    console.print(table)
+
+    console.print()
+    console.print(
+        f"[bold]{len(report.succeeded)} of {len(report.entries)}[/bold] deck(s) "
+        f"in {report.seconds:.0f}s · ~${report.cost_usd:.2f} · wrote to {out_dir}"
+    )
+    if report.failed:
+        err_console.print(
+            f"[bold red]{len(report.failed)} deck(s) failed.[/bold red] "
+            f"The rest were written."
+        )
+        raise typer.Exit(code=report.exit_code)
+
+
+def _announce_batch_entry(entry: BatchEntry) -> None:
+    """One line per deck as it finishes, so a long batch is not a silent wait."""
+    if entry.result is None:
+        err_console.print(f"[red]failed[/red] {entry.deck.name}: {escape(entry.error or '')}")
+        return
+    company = entry.result.one_pager.company_name.value or entry.deck.stem
+    console.print(f"[green]done[/green] {escape(company)} — {entry.result.pdf.name}")
 
 @app.command()
 def extract(
@@ -318,6 +423,7 @@ def redraw(
         float,
         typer.Option("--min-confidence", help="Below this, a field is flagged."),
     ] = DEFAULT_MIN_CONFIDENCE,
+    engine: EngineOpt = None,
 ) -> None:
     """Render the one-pager PDF from an existing one-pager JSON. No model call.
 
@@ -350,7 +456,11 @@ def redraw(
     destination = out or one_pager.with_name(f"{one_pager.stem}.pdf")
     try:
         written, cuts = fit_and_render(
-            document, destination, paper=_paper(paper), threshold=min_confidence
+            document,
+            destination,
+            paper=_paper(paper),
+            threshold=min_confidence,
+            renderer=get_engine(engine) if engine else None,
         )
     except DeckpagerError as exc:
         _fail(exc)

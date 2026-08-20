@@ -52,8 +52,12 @@ deckpager render DECK   Deck -> one-pager PDF and JSON. The main command.
         --no-images         Skip slide rasterization
         --dry-run           Parse and report only. No model call, no cost.
         --no-email          Do not email the result, even when configured
+        --engine ENGINE     reportlab (default) or weasyprint
     -v, --verbose           Full traceback on failure
 
+deckpager batch DIR --out-dir DIR [--concurrency 3]
+                        Every deck in a directory. One bad deck never stops the
+                        others; exits non-zero if any failed.
 deckpager extract DECK  Extraction only, no PDF.
 deckpager redraw JSON   Re-render a PDF from a saved extraction. No model call.
 deckpager schema        Print the JSON schema the model is held to.
@@ -87,6 +91,40 @@ prompt and the key changes on its own.
 
 A cheaper model is `--model claude-sonnet-4-6`, at roughly 60% of the cost. The default is
 Opus because a hallucinated valuation reaching a partner costs more than the difference.
+
+---
+
+## Batches
+
+```bash
+deckpager batch ~/inbox --out-dir ~/onepagers --concurrency 3
+```
+
+Analyzes every supported deck directly inside the directory. Not recursively, so the output
+of a previous run and any archive subfolder are left alone. Decks run three at a time by
+default.
+
+**A failing deck never stops the batch.** It is reported in the table and the rest are
+written. The command exits non-zero if anything failed, carrying the most serious failure
+code, so a configuration problem is never hidden behind a merely unreadable file.
+
+Outputs are named for the company. When two decks resolve to the same company — a v1 and a
+v2, or a PDF and a PPTX of the same pitch — the deck filename disambiguates rather than one
+silently overwriting the other.
+
+---
+
+## Render engines
+
+`--engine reportlab` is the default and the only implemented engine. It is pure Python, so
+it works wherever deckpager installs.
+
+`--engine weasyprint` is registered behind the same `Renderer` protocol but not built.
+Asking for it reports why — whether the package is missing, its native GTK libraries are
+missing, or simply that the layout is not implemented — rather than failing with a stack
+trace. Building it would mean a second full layout that cannot be run or tested on a machine
+without GTK, and an unverified second layout drifts from
+[`templates/onepager.md`](templates/onepager.md) without anyone noticing.
 
 ---
 

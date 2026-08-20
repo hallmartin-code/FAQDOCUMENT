@@ -1,12 +1,25 @@
-"""Rendering: the one-pager renderer, its fitting ladder, and the house style."""
+"""Rendering: the engine contract, the ReportLab engine, and the fitting ladder."""
 
 from __future__ import annotations
 
-from deckpager.render.onepager import (
-    OnePagerRenderer,
-    PageLayout,
+from deckpager.render.base import (
+    ENGINE_NAMES,
+    EngineName,
     Paper,
-    fit_and_render,
+    Renderer,
+    default_engine,
+    get_engine,
 )
+from deckpager.render.onepager import OnePagerRenderer, PageLayout, fit_and_render
 
-__all__ = ["OnePagerRenderer", "PageLayout", "Paper", "fit_and_render"]
+__all__ = [
+    "ENGINE_NAMES",
+    "EngineName",
+    "OnePagerRenderer",
+    "PageLayout",
+    "Paper",
+    "Renderer",
+    "default_engine",
+    "fit_and_render",
+    "get_engine",
+]

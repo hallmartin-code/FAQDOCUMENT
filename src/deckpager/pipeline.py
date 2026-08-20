@@ -7,19 +7,24 @@ supplies is somewhere to put the files and a way to hear about progress.
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from deckpager.cache import ExtractionCache
 from deckpager.config import Settings
+from deckpager.errors import EXIT_BAD_INPUT, DeckpagerError, IngestError, RenderError
 from deckpager.extract.client import Extractor
 from deckpager.extract.pipeline import cost_line, extract_one_pager
+from deckpager.ingest.router import SUPPORTED_SUFFIXES
 from deckpager.mailer import EmailOutcome
 from deckpager.models import DEFAULT_MIN_CONFIDENCE, OnePager
-from deckpager.render.onepager import Paper, fit_and_render
+from deckpager.render.base import Paper, Renderer, get_engine
+from deckpager.render.onepager import fit_and_render
 
 #: Called with a short stage name as each stage begins.
 StageHook = Callable[[str], None]
@@ -53,6 +58,40 @@ def default_stem(deck_path: Path, one_pager: OnePager) -> str:
     return f"{cleaned.replace(' ', '_') or deck_path.stem}-onepager"
 
 
+#: Guards the filename reservation below. A batch runs several decks at once, and two
+#: threads computing the same free name at the same time would both think it was free.
+_NAME_LOCK = threading.Lock()
+
+
+def reserve_stem(directory: Path, stem: str, deck: Path) -> str:
+    """Claim a stem no other output is using, and create both files to hold it.
+
+    Outputs are named for the company, which is the right name in a folder of other
+    companies. It is not unique: two versions of one deck, or a PDF and a PPTX of the
+    same pitch, extract to the same company and the second would overwrite the first
+    without saying so. The deck filename disambiguates, and a counter after that.
+
+    Single-deck runs do not use this - re-rendering the same deck should overwrite its
+    own previous output, which is what makes a re-run idempotent.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    candidates = [stem, f'{stem}-{deck.stem}'] + [
+        f'{stem}-{deck.stem}-{n}' for n in range(2, 100)
+    ]
+    with _NAME_LOCK:
+        for candidate in candidates:
+            pdf = directory / f'{candidate}.pdf'
+            js = directory / f'{candidate}.json'
+            if pdf.exists() or js.exists():
+                continue
+            pdf.touch()
+            js.touch()
+            return candidate
+    raise RenderError(
+        f'Could not find a free filename for {stem!r} in {directory}. '
+        f'Clear the directory or use a different --out-dir.'
+    )
+
 def run(
     deck_path: Path,
     *,
@@ -69,6 +108,8 @@ def run(
     on_stage: StageHook | None = None,
     on_retry: Callable[[str], None] | None = None,
     send_email: bool = True,
+    engine: str | Renderer | None = None,
+    unique_names: bool = False,
 ) -> RunResult:
     """Ingest, extract, render. Returns the artifacts and what the run cost."""
     started = time.monotonic()
@@ -86,13 +127,20 @@ def run(
     )
 
     stage("rendering")
-    stem = default_stem(deck_path, one_pager)
     directory = out_dir or deck_path.parent
+    stem = default_stem(deck_path, one_pager)
+    if unique_names:
+        stem = reserve_stem(directory, stem, deck_path)
     pdf_path = out_pdf or directory / f"{stem}.pdf"
     json_path = out_json or directory / f"{stem}.json"
 
+    renderer = get_engine(engine) if isinstance(engine, str) else engine
     pdf_path, truncations = fit_and_render(
-        one_pager, pdf_path, paper=paper, threshold=min_confidence
+        one_pager,
+        pdf_path,
+        paper=paper,
+        threshold=min_confidence,
+        renderer=renderer,
     )
 
     # Recorded on the document, not only returned: someone reading the JSON months later
@@ -128,3 +176,125 @@ def run(
             )
 
     return result
+
+@dataclass
+class BatchEntry:
+    """One deck in a batch run: what it produced, or why it did not."""
+
+    deck: Path
+    result: RunResult | None = None
+    error: str | None = None
+    exit_code: int = 0
+
+    @property
+    def ok(self) -> bool:
+        return self.result is not None
+
+
+@dataclass
+class BatchReport:
+    """Everything a caller needs to report on a directory of decks."""
+
+    entries: list[BatchEntry] = field(default_factory=list)
+    seconds: float = 0.0
+
+    @property
+    def succeeded(self) -> list[BatchEntry]:
+        return [e for e in self.entries if e.ok]
+
+    @property
+    def failed(self) -> list[BatchEntry]:
+        return [e for e in self.entries if not e.ok]
+
+    @property
+    def cost_usd(self) -> float:
+        """What the batch actually spent. A cache hit contributes nothing."""
+        return sum(
+            e.result.one_pager.provenance.estimated_cost_usd or 0.0
+            for e in self.succeeded
+            if e.result is not None
+        )
+
+    @property
+    def exit_code(self) -> int:
+        """The worst failure, so a config problem is not hidden by a bad deck.
+
+        Zero only when every deck succeeded: a batch that half-worked is not a success,
+        and a script that treats it as one will quietly ship a partial set.
+        """
+        return max((e.exit_code for e in self.failed), default=0)
+
+
+def find_decks(directory: Path) -> list[Path]:
+    """Every supported deck directly inside `directory`, in a stable order.
+
+    Not recursive. A batch that walked subdirectories would pick up the one-pagers it
+    had already written on a previous run, and a deck folder usually has an archive
+    subfolder nobody meant to re-analyze.
+    """
+    from deckpager.ingest.router import SUPPORTED_SUFFIXES
+
+    return sorted(
+        path
+        for path in directory.iterdir()
+        if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES
+    )
+
+
+def run_batch(
+    directory: Path,
+    *,
+    settings: Settings,
+    out_dir: Path,
+    concurrency: int = 3,
+    on_start: Callable[[Path], None] | None = None,
+    on_finish: Callable[[BatchEntry], None] | None = None,
+    **run_options: Any,
+) -> BatchReport:
+    """Analyze every deck in a directory. One bad deck never stops the others.
+
+    Threads rather than processes: the work is a long HTTP call plus some PDF parsing,
+    both of which release the GIL, and threads keep the extraction cache and the error
+    types shared rather than pickled across a process boundary.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    if not directory.is_dir():
+        raise IngestError(f"Not a directory: {directory}")
+
+    decks = find_decks(directory)
+    if not decks:
+        raise IngestError(
+            f"No decks in {directory}. Looked for: "
+            f"{', '.join(sorted(SUPPORTED_SUFFIXES))}."
+        )
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    started = time.monotonic()
+
+    def analyze(deck: Path) -> BatchEntry:
+        if on_start is not None:
+            on_start(deck)
+        try:
+            result = run(
+                deck,
+                settings=settings,
+                out_dir=out_dir,
+                unique_names=True,
+                **run_options,
+            )
+            entry = BatchEntry(deck=deck, result=result)
+        except DeckpagerError as exc:
+            entry = BatchEntry(deck=deck, error=str(exc), exit_code=exc.exit_code)
+        except Exception as exc:  # noqa: BLE001 - one deck must not end the batch
+            entry = BatchEntry(
+                deck=deck, error=f"Unexpected error: {exc}", exit_code=EXIT_BAD_INPUT
+            )
+        if on_finish is not None:
+            on_finish(entry)
+        return entry
+
+    with ThreadPoolExecutor(max_workers=max(1, concurrency)) as pool:
+        entries = list(pool.map(analyze, decks))
+
+    return BatchReport(entries=entries, seconds=time.monotonic() - started)

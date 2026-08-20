@@ -829,3 +829,56 @@ The tri-colour accent bar sat at `top:-2px` inside an `overflow:hidden` card, so
 rendered - visible only once the page was screenshotted. And the finished progress bar was
 left at 100 percent, where a full-width rule across the card reads as a divider somebody
 drew on purpose; it now hides on completion.
+
+---
+
+## deckpager — Closing the spec gaps
+
+### DP54. `batch` runs in threads, and one bad deck never stops it
+
+Threads rather than processes: the work is a long HTTP call plus some PDF parsing, both of
+which release the GIL, and threads keep the extraction cache and the error types shared
+rather than pickled across a process boundary.
+
+Every deck is caught individually. A batch exists precisely because a partial result beats
+an aborted run, so a deck that fails is reported and the others are still written. The exit
+code is the most serious failure among them, and zero only when every deck succeeded — a
+script that treats a half-finished batch as done ships a partial set.
+
+`find_decks` does not recurse. A deck folder usually has an archive nobody meant to
+re-analyze, and a recursive walk would pick up the one-pagers written by the last run.
+
+### DP55. Batch outputs disambiguate; single runs still overwrite
+
+Found by running `batch` on the test fixtures: all three extract to the same company, so the
+second and third silently overwrote the first, and the directory held one file where three
+were expected. Two versions of a real deck, or a PDF and a PPTX of the same pitch, would do
+the same to a partner's folder.
+
+`reserve_stem` claims a free name under a lock and touches both files to hold it, falling
+back to the deck filename and then a counter. Only `batch` uses it: re-rendering a single
+deck should overwrite its own previous output, which is what makes a re-run idempotent
+rather than an accumulation of `-2`, `-3`, `-4`.
+
+### DP56. The engine seam is real; the WeasyPrint engine is not
+
+Spec §4 asks for a `Renderer` protocol and for missing native dependencies to be reported
+actionably. Both exist: the protocol is in `render/base.py`, ReportLab satisfies it, and
+`WeasyPrintEngine.preflight` distinguishes not-installed from installed-without-GTK, because
+those have different fixes and the second is the confusing one.
+
+The WeasyPrint layout itself is not built. It would be a second full rendering of the same
+document, on a machine where it cannot be run or tested, and an unverified second layout
+drifts from `templates/onepager.md` with nothing to catch it. Asking for it refuses with the
+reason rather than pretending.
+
+Worth revisiting on Railway: the deploy target is Linux, where the GTK libraries are
+installable, so the engine could be built and tested there even though it cannot be here.
+
+### DP57. The non-English rule lives in the user message
+
+Spec §11 wants a non-English deck processed normally with the language recorded in
+`missing_information`. Spec §8 freezes the system prompt verbatim and says nothing about
+language. The two are only satisfiable together if the instruction goes in the half that is
+not verbatim, so `LANGUAGE_RULE` is appended to the user message, and a test asserts the
+system prompt still contains no mention of language.
