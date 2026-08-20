@@ -151,7 +151,7 @@ def render_assessment(
 ) -> list[Path]:
     """Render the one-pager, fitting it to a single page or failing loudly."""
     from deckpager.render.fit import fit_to_one_page
-    from deckpager.render.onepager import OnePagerRenderer
+    from deckpager.render.legacy_onepager import OnePagerRenderer
 
     say = console.print if console else (lambda *_a, **_k: None)
     size = cast(Paper, check_paper(paper))

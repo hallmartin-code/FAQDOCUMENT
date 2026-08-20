@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 import typer
+from pydantic import ValidationError
 from rich.console import Console
 from rich.markup import escape
 
 from deckpager import __version__
-from deckpager.errors import DeckpagerError
+from deckpager.errors import EXIT_BAD_INPUT, DeckpagerError
 from deckpager.ingest.models import Deck
+from deckpager.models import DEFAULT_MIN_CONFIDENCE
+from deckpager.render.onepager import PAGE_SIZES, Paper
 
 # Windows consoles still default to a legacy code page, which turns the em-dashes and
 # arrows in prompts, warnings, and company names into replacement characters — or raises
@@ -79,6 +82,16 @@ def _fail(exc: DeckpagerError) -> None:
     err_console.print(f"[bold red]error:[/bold red] {exc}")
     raise typer.Exit(code=exc.exit_code)
 
+
+def _paper(value: str) -> Paper:
+    """Validate --paper before anything expensive runs, and narrow it for the renderer."""
+    if value not in PAGE_SIZES:
+        err_console.print(
+            f"[bold red]error:[/bold red] Unknown --paper {value!r}. "
+            f"Choose one of: {', '.join(sorted(PAGE_SIZES))}."
+        )
+        raise typer.Exit(code=EXIT_BAD_INPUT)
+    return cast(Paper, value)
 
 def _announce_schema_retry(errors: str) -> None:
     """Say when the model failed validation and is being given one correction turn."""
@@ -240,17 +253,59 @@ def extract(
 
 @app.command()
 def redraw(
-    assessment: Annotated[Path, typer.Argument(help="Path to an assessment JSON file.")],
-    out: StemOpt = None,
+    one_pager: Annotated[
+        Path, typer.Argument(help="Path to a one-pager JSON file written by `extract`.")
+    ],
+    out: Annotated[
+        Path | None,
+        typer.Option("-o", "--out", help="Output PDF path."),
+    ] = None,
     paper: PaperOpt = "letter",
+    min_confidence: Annotated[
+        float,
+        typer.Option("--min-confidence", help="Below this, a field is flagged."),
+    ] = DEFAULT_MIN_CONFIDENCE,
 ) -> None:
-    """Re-render the one-pager from an existing analysis JSON. No model call."""
-    from deckpager.pipeline import run_render
+    """Render the one-pager PDF from an existing one-pager JSON. No model call.
+
+    The fast loop for layout work: re-rendering costs nothing, so the page can be
+    iterated on without paying for an extraction each time.
+    """
+    import json
+
+    from deckpager.models import OnePager
+    from deckpager.render.onepager import fit_and_render
 
     try:
-        run_render(assessment=assessment, out_stem=out, paper=paper, console=console)
+        payload = json.loads(one_pager.read_text(encoding="utf-8"))
+    except OSError as exc:
+        err_console.print(f"[bold red]error:[/bold red] Could not read {one_pager}: {exc}")
+        raise typer.Exit(code=EXIT_BAD_INPUT) from exc
+    except json.JSONDecodeError as exc:
+        err_console.print(f"[bold red]error:[/bold red] {one_pager.name} is not valid JSON: {exc}")
+        raise typer.Exit(code=EXIT_BAD_INPUT) from exc
+
+    try:
+        document = OnePager.model_validate(payload)
+    except ValidationError as exc:
+        err_console.print(
+            f"[bold red]error:[/bold red] {one_pager.name} is not a deckpager one-pager "
+            f"({exc.error_count()} schema problem(s)). Re-run `deckpager extract`."
+        )
+        raise typer.Exit(code=EXIT_BAD_INPUT) from exc
+
+    destination = out or one_pager.with_name(f"{one_pager.stem}.pdf")
+    try:
+        written, cuts = fit_and_render(
+            document, destination, paper=_paper(paper), threshold=min_confidence
+        )
     except DeckpagerError as exc:
         _fail(exc)
+        return
+
+    for cut in cuts:
+        console.print(f"[yellow]fitted:[/yellow] {escape(cut)}")
+    console.print(f"[green]wrote[/green] {written}")
 
 @app.command()
 def schema(

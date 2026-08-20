@@ -1,92 +1,146 @@
-"""The one-page screening memo, drawn with ReportLab.
+"""The one-pager, drawn with ReportLab.
 
-Implements `templates/onepager.md`: four zones, the field map in §4, the empty states in
-§4.3, and the fixed vocabularies in §4.5. It draws exactly what the assessment contains —
-it never re-ranks, re-words, or fills a gap with a plausible value.
+Every drawing method takes an optional canvas and returns the height it consumed. Called
+with `None` it measures without drawing; called with a canvas it draws exactly what it
+measured. Measurement and rendering therefore cannot disagree — the failure that makes a
+one-page guarantee vacuous is a layout that measures one thing and paints another.
 
-Layout is absolute rather than flowed. A one-pager has a known shape and a hard page
-budget, so placing frames directly is both simpler to reason about and cheaper to measure
-than driving a flowable document and discovering the overflow afterwards.
+Nothing here reads a colour, a font, or a band height from anywhere but `style`.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any, Literal
 
-from pypdf import PdfReader
-from reportlab.lib.pagesizes import A4, LETTER
+from reportlab.lib.pagesizes import A4, letter
 from reportlab.lib.utils import simpleSplit
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen.canvas import Canvas
 
-from deckpager.analysis.schema import Assessment, Risk, Score
 from deckpager.errors import RenderError
-from deckpager.render import theme as t
-from deckpager.render.base import Layout, Paper, Renderer
+from deckpager.models import DEFAULT_MIN_CONFIDENCE, Field, Metric, OnePager, TeamMember
+from deckpager.render import style as s
 
-PAGE_SIZES = {"letter": LETTER, "a4": A4}
+Paper = Literal["letter", "a4"]
 
-INSUFFICIENT = "—  insufficient data"
+#: Annotated because ReportLab ships no stubs: without this the page dimensions
+#: arrive as Any and every measurement downstream silently loses its type.
+PAGE_SIZES: dict[str, tuple[float, float]] = {"letter": letter, "a4": A4}
 
-#: Tightest legal gap between left-column blocks. Anything less and the headings stop
-#: reading as separators.
-_MIN_BLOCK_GAP = 8.0
+#: The fields this layout puts on the page. The footer counts low-confidence fields
+#: from this set only - flagging a field the reader cannot find is worse than silence.
+RENDERED_FIELDS: tuple[str, ...] = (
+    "company_name",
+    "tagline",
+    "website",
+    "sector",
+    "stage",
+    "hq_location",
+    "raise_amount_usd",
+    "pre_money_valuation_usd",
+    "instrument",
+    "amount_committed_usd",
+    "close_date",
+    "problem",
+    "solution",
+    "business_model",
+    "go_to_market",
+    "use_of_funds",
+    "traction_metrics",
+    "tam_usd",
+    "sam_usd",
+    "som_usd",
+    "market_note",
+    "team",
+    "competitors",
+    "differentiation",
+    "key_strengths",
+    "key_risks",
+    "missing_information",
+)
 
 
-#: Words a risk reason is capped at once the ladder decides to shorten them. A rationale
-#: with no clause separator at all still has to get shorter, or the rung is a no-op.
-_RISK_REASON_WORDS = 28
+@dataclass(frozen=True)
+class PageLayout:
+    """The knobs the fitting ladder turns. One instance is one attempt at the page.
 
-
-def _cut_words(text: str, limit: int) -> str:
-    """Hard cut at a word boundary. The fallback when there is nothing better to cut on."""
-    words = text.split()
-    if len(words) <= limit:
-        return text
-    return " ".join(words[:limit]).rstrip(",;:—-") + "…"
-
-
-def _first_clause(text: str) -> str:
-    """The first clause of a rationale, for the compressed risk row.
-
-    Guarded on word count, not characters: "Runway is short" is a whole clause at 15
-    characters, while a 25-character fragment ending on a stray comma is not.
-
-    Falls back to a word cut. A model that writes an 800-character rationale as one
-    unpunctuated clause would otherwise sail through this rung unchanged, which is exactly
-    the case the rung exists for.
+    The drop order is spec §9's, lowest-priority first: go-to-market, then business model,
+    then competition, then the market note. Typography moves only after prose has been
+    given up, because a smaller page is worse to read than a shorter one.
     """
-    for separator in (" — ", "; ", ", "):
-        head, found, _ = text.partition(separator)
-        if found and len(head.split()) >= 3:
-            return _cut_words(head.rstrip(".") + ".", _RISK_REASON_WORDS)
-    sentence, found, _ = text.partition(". ")
-    candidate = (sentence + ".") if found else text
-    return _cut_words(candidate, _RISK_REASON_WORDS)
+
+    drop_go_to_market: bool = False
+    drop_business_model: bool = False
+    drop_competitors: bool = False
+    drop_market_note: bool = False
+    #: How many diligence requests survive into the analyst block. Spec 6 allows 5.
+    requests: int = 5
+    #: How many traction tiles survive. Spec 6 caps the extraction at 6.
+    metrics: int = 6
+    #: How many people survive. Spec 6 caps the extraction at 4.
+    people: int = 4
+    #: Fraction of each prose field that survives. Spec 3 requires overflow to be
+    #: handled by field-level truncation with an ellipsis rather than a second page,
+    #: and this is that lever: the last resort, and the one that cannot fail to work.
+    text_scale: float = 1.0
+    body_pt: float = s.SIZE_BODY
+    leading: float = s.LEADING
+
+    def describe(self) -> list[str]:
+        """What was given up, one line each, for the provenance record."""
+        notes: list[str] = []
+        if self.drop_go_to_market:
+            notes.append("go-to-market truncated")
+        if self.drop_business_model:
+            notes.append("business model truncated")
+        if self.drop_competitors:
+            notes.append("competitor list truncated")
+        if self.drop_market_note:
+            notes.append("market note truncated")
+        if self.requests < 5:
+            notes.append(f"diligence requests cut to {self.requests}")
+        if self.metrics < 6:
+            notes.append(f"traction tiles cut to {self.metrics}")
+        if self.people < 4:
+            notes.append(f"team cut to {self.people}")
+        if self.text_scale < 1.0:
+            notes.append(f"prose truncated to {self.text_scale:.0%} of its length")
+        if self.body_pt != s.SIZE_BODY:
+            notes.append(f"body set to {self.body_pt}pt")
+        if self.leading != s.LEADING:
+            notes.append(f"line height tightened to {self.leading}")
+        return notes
 
 
-def _truncate_words(text: str, limit: int | None) -> str:
-    """Cut to `limit` words, preferring a sentence boundary.
+def money(value: int | None) -> str | None:
+    """Render an amount the way a partner reads it: $2M, $750K, $5.5M."""
+    if value is None:
+        return None
+    magnitude = abs(value)
+    if magnitude >= 1_000_000_000:
+        return f"${value / 1_000_000_000:.1f}B".replace(".0B", "B")
+    if magnitude >= 1_000_000:
+        return f"${value / 1_000_000:.1f}M".replace(".0M", "M")
+    if magnitude >= 1_000:
+        return f"${value / 1_000:.0f}K"
+    return f"${value:,}"
 
-    Falls back to a word cut when the text has no usable sentence break — a summary
-    written as one long sentence must still shrink, or the ladder's first and cheapest
-    rung silently does nothing.
-    """
-    if limit is None or len(text.split()) <= limit:
+
+def ellipsize(text: str, limit: int) -> str:
+    """Cut to `limit` characters at a word boundary, with an ellipsis (spec §3)."""
+    if len(text) <= limit:
         return text
-    kept: list[str] = []
-    for sentence in text.replace("\n", " ").split(". "):
-        candidate = [*kept, sentence]
-        if len(" ".join(candidate).split()) > limit and kept:
-            break
-        kept = candidate
-    joined = ". ".join(s.rstrip(".") for s in kept)
-    if joined and len(joined.split()) <= limit:
-        return joined + "."
-    return _cut_words(text, limit)
+    cut = text[: max(limit - 1, 0)].rstrip()
+    if " " in cut:
+        cut = cut[: cut.rindex(" ")]
+    return f"{cut}…"
 
 
-class OnePagerRenderer(Renderer):
-    """Draws the screening one-pager with ReportLab."""
+class OnePagerRenderer:
+    """Draws an OnePager onto a single page."""
 
     name = "reportlab"
 
@@ -96,464 +150,827 @@ class OnePagerRenderer(Renderer):
         try:
             import reportlab  # noqa: F401
         except ImportError:  # pragma: no cover - dependency is declared
-            problems.append(
-                "reportlab is not installed. Run `pip install -e .` in the project root."
-            )
+            problems.append("reportlab is not installed. Run `pip install -e .` in the root.")
         return problems
 
     def page_count(self, document: Path) -> int:
         """Count pages by reading the produced PDF back."""
+        from pypdf import PdfReader
+
         try:
             return len(PdfReader(str(document)).pages)
         except Exception as exc:  # pypdf raises assorted types on malformed files
-            raise RenderError(f"Could not read back the rendered PDF {document}: {exc}") from exc
+            raise RenderError(f"Could not read back the PDF {document}: {exc}") from exc
 
-    def overflow(self, assessment: Assessment, layout: Layout, paper: Paper = "letter") -> float:
-        """Points by which the content exceeds the page. Zero means it fits.
+    # --- geometry ---------------------------------------------------------------------
 
-        This, not `page_count`, is what the fitting ladder measures. The layout is drawn
-        at absolute coordinates, so ReportLab will happily paint text past the bottom edge
-        without ever starting a second page — a page count of 1 is therefore no evidence
-        that anything fits. Measuring the geometry directly is the only honest signal.
+    def overflow(
+        self,
+        one_pager: OnePager,
+        layout: PageLayout,
+        *,
+        paper: Paper = "letter",
+        threshold: float = DEFAULT_MIN_CONFIDENCE,
+    ) -> float:
+        """Points by which the content exceeds the page, or 0 when it fits.
+
+        Geometry, not page count. ReportLab paints past the bottom edge without ever
+        starting a second page, so a page count of 1 is no evidence that anything fits.
         """
         width, height = PAGE_SIZES[paper]
-        column_width = (width - 2 * t.MARGIN - t.COLUMN_GAP) * t.LEFT_COLUMN_RATIO
-        sidebar_width = width - t.MARGIN - (t.MARGIN + column_width + t.COLUMN_GAP)
+        content_width = width - 2 * s.MARGIN
+        left_width, right_width = self._column_widths(content_width)
 
-        available = self._body_top(height) - self._footer_height(assessment, layout, width)
-        left = self._left_content_height(assessment, layout, column_width)
-        sidebar = self._sidebar_height(assessment, sidebar_width)
-        return max(0.0, max(left, sidebar) - available)
+        body_top = height - s.MARGIN - s.HEIGHT_HEADER - s.GAP_BAND - s.HEIGHT_ASK - s.GAP_BAND
+        analyst_height = self._analyst_block(None, one_pager, layout, 0, 0, content_width)
+        body_floor = s.MARGIN + s.HEIGHT_FOOTER + analyst_height + s.GAP_BAND
+        available = body_top - body_floor
 
-    def _body_top(self, height: float) -> float:
-        """Where the two columns begin, below the header band."""
-        return height - t.MARGIN - t.SIZE_COMPANY - t.SIZE_ONELINER - t.SIZE_META - 25
-
-    def _footer_height(self, a: Assessment, layout: Layout, width: float) -> float:
-        """Height of the diligence block plus the provenance line, from the page bottom."""
-        usable = width - 2 * t.MARGIN
-        questions = a.ic_view.diligence_questions[: layout.diligence_questions]
-        provenance_lines = len(
-            simpleSplit(" · ".join(self._provenance_parts(a)), t.FONT, t.SIZE_PROVENANCE, usable)
+        needed = max(
+            self._left_column(None, one_pager, layout, 0, 0, left_width, threshold),
+            self._right_column(None, one_pager, layout, 0, 0, right_width, threshold),
         )
-        return (
-            t.MARGIN
-            + provenance_lines * (t.SIZE_PROVENANCE * 1.25)
-            + 15
-            + len(questions) * (t.SIZE_QUESTION * 1.3)
-            + t.SIZE_ZONE_HEADING
-            + 14
-        )
+        return max(0.0, needed - available)
 
-    def _left_content_height(self, a: Assessment, layout: Layout, width: float) -> float:
-        """Total height the left column needs at its tightest legal spacing."""
-        summary = _truncate_words(a.executive_summary, layout.summary_words)
-        blocks = [
-            self._summary_height(summary, layout, width),
-            self._bullets_height(a.ic_view.biggest_strengths[:3], layout, width),
-            self._bullets_height(a.ic_view.biggest_concerns[:3], layout, width),
-            self._risk_height(a.onepager_risks(), layout, width),
-        ]
-        return sum(blocks) + _MIN_BLOCK_GAP * len(blocks)
+    def _column_widths(self, content_width: float) -> tuple[float, float]:
+        """Left 58%, right 42% (spec §9), with the gap taken off the top."""
+        usable = content_width - s.COLUMN_GAP
+        left = usable * s.LEFT_COLUMN_RATIO
+        return left, usable - left
 
-    def _sidebar_height(self, a: Assessment, width: float) -> float:
-        """Ten scorecard rows plus the overall block."""
-        rows = len([row for row in a.scorecard if row.name != "Overall Investability"])
-        return t.SIZE_ZONE_HEADING + 5 + rows * 13.0 + 10 + t.SIZE_OVERALL + 26
+    # --- rendering --------------------------------------------------------------------
 
-    def render_onepager(
+    def render(
         self,
-        assessment: Assessment,
+        one_pager: OnePager,
         destination: Path,
         *,
         paper: Paper = "letter",
-        layout: Layout | None = None,
+        layout: PageLayout | None = None,
+        threshold: float = DEFAULT_MIN_CONFIDENCE,
     ) -> Path:
-        """Draw the four zones onto a single page."""
-        if paper not in PAGE_SIZES:
-            raise RenderError(
-                f"Unknown paper size {paper!r}. Choose one of: {', '.join(PAGE_SIZES)}."
-            )
-        layout = layout or Layout()
+        """Write the one-pager. Exactly one page, always."""
+        layout = layout or PageLayout()
         width, height = PAGE_SIZES[paper]
+        content_width = width - 2 * s.MARGIN
+        left_width, right_width = self._column_widths(content_width)
+
         destination.parent.mkdir(parents=True, exist_ok=True)
-
         canvas = Canvas(str(destination), pagesize=(width, height))
-        canvas.setTitle(f"{assessment.company_name} — {t.DOCUMENT_TITLE}")
+        canvas.setTitle(f"{self._company(one_pager)} — TEN Capital one-pager")
         canvas.setAuthor("TEN Capital Network")
-        canvas.setSubject(t.DOCUMENT_TITLE)
 
-        body_top = self._header(canvas, assessment, width, height)
-        footer_top = self._footer(canvas, assessment, layout, width)
+        top = height - s.MARGIN
+        self._header(canvas, one_pager, s.MARGIN, top, content_width, threshold)
 
-        column_width = (width - 2 * t.MARGIN - t.COLUMN_GAP) * t.LEFT_COLUMN_RATIO
-        sidebar_x = t.MARGIN + column_width + t.COLUMN_GAP
-        sidebar_width = width - t.MARGIN - sidebar_x
+        ask_top = top - s.HEIGHT_HEADER - s.GAP_BAND
+        self._ask_strip(canvas, one_pager, s.MARGIN, ask_top, content_width, threshold)
 
-        canvas.setStrokeColor(t.RULE_LIGHT)
-        canvas.setLineWidth(t.RULE_WIDTH)
-        canvas.line(
-            sidebar_x - t.COLUMN_GAP / 2, footer_top + 6, sidebar_x - t.COLUMN_GAP / 2, body_top
+        body_top = ask_top - s.HEIGHT_ASK - s.GAP_BAND
+        analyst_height = self._analyst_block(None, one_pager, layout, 0, 0, content_width)
+        analyst_top = s.MARGIN + s.HEIGHT_FOOTER + analyst_height
+
+        self._left_column(canvas, one_pager, layout, s.MARGIN, body_top, left_width, threshold)
+        self._right_column(
+            canvas,
+            one_pager,
+            layout,
+            s.MARGIN + left_width + s.COLUMN_GAP,
+            body_top,
+            right_width,
+            threshold,
         )
-
-        self._left_column(canvas, assessment, layout, t.MARGIN, body_top, column_width, footer_top)
-        self._sidebar(canvas, assessment, sidebar_x, body_top, sidebar_width)
+        self._analyst_block(canvas, one_pager, layout, s.MARGIN, analyst_top, content_width)
+        self._footer(canvas, one_pager, s.MARGIN, s.MARGIN, content_width, threshold)
 
         canvas.showPage()
         canvas.save()
         return destination
 
-    # --- Zone 1: header band -------------------------------------------------
+    # --- header -----------------------------------------------------------------------
 
-    def _header(self, canvas: Canvas, a: Assessment, width: float, height: float) -> float:
-        """Company identity left, verdict chip right. Returns the y the body starts at."""
-        y = height - t.MARGIN - t.SIZE_COMPANY
-        chip_width = 132.0
-        text_width = width - 2 * t.MARGIN - chip_width - 12
+    def _company(self, one_pager: OnePager) -> str:
+        """The company name, or an honest placeholder when the deck never said."""
+        return one_pager.company_name.value or "Unnamed company"
 
-        canvas.setFillColor(t.NAVY)
-        canvas.setFont(t.FONT_BOLD, t.SIZE_COMPANY)
-        name = a.company_name
-        while canvas.stringWidth(name, t.FONT_BOLD, t.SIZE_COMPANY) > text_width and len(name) > 4:
-            name = name[:-2]
-        if name != a.company_name:
-            name = name.rstrip() + "…"
-        canvas.drawString(t.MARGIN, y, name)
-
-        y -= t.SIZE_ONELINER + 3
-        canvas.setFillColor(t.GREY)
-        canvas.setFont(t.FONT, t.SIZE_ONELINER)
-        for line in simpleSplit(a.one_line_description, t.FONT, t.SIZE_ONELINER, text_width)[:1]:
-            canvas.drawString(t.MARGIN, y, line)
-
-        y -= t.SIZE_META + 4
-        canvas.setFont(t.FONT, t.SIZE_META)
-        facts = "   ·   ".join(self._header_facts(a))
-        # Truncate rather than let a long sector string run under the verdict chip.
-        while canvas.stringWidth(facts, t.FONT, t.SIZE_META) > text_width and len(facts) > 8:
-            facts = facts[:-2]
-        if facts != "   ·   ".join(self._header_facts(a)):
-            facts = facts.rstrip(" ·") + "…"
-        canvas.drawString(t.MARGIN, y, facts)
-
-        self._chip(canvas, a, width - t.MARGIN - chip_width, height - t.MARGIN - 26, chip_width)
-
-        rule_y = y - 8
-        canvas.setStrokeColor(t.NAVY)
-        canvas.setLineWidth(t.RULE_WIDTH)
-        canvas.line(t.MARGIN, rule_y, width - t.MARGIN, rule_y)
-        return rule_y - 14
-
-    def _header_facts(self, a: Assessment) -> list[str]:
-        """Stage, ask, sector, dates — each absent one stated rather than left blank."""
-        return [
-            a.stage_signal or "Stage not stated",
-            a.deal.ask or "Ask not stated in deck",
-            a.deal.sector or "Sector not stated",
-            a.deal.deck_date or "Deck undated",
-            f"Analyzed {a.meta.generated_at:%b %d, %Y}",
-        ]
-
-    def _chip(self, canvas: Canvas, a: Assessment, x: float, y: float, width: float) -> None:
-        """The verdict chip, with confidence beneath it."""
-        verdict = a.ic_view.recommendation
-        canvas.setFillColor(t.VERDICT_FILL[verdict])
-        canvas.roundRect(x, y, width, 18, 3, stroke=0, fill=1)
-        canvas.setFillColor(t.WHITE)
-        canvas.setFont(t.FONT_BOLD, t.SIZE_CHIP)
-        canvas.drawCentredString(x + width / 2, y + 5.5, t.VERDICT_LABEL[verdict])
-
-        canvas.setFillColor(t.GREY)
-        canvas.setFont(t.FONT, t.SIZE_CONFIDENCE)
-        # The dagger marks a confidence the gates capped, so a reader can tell a stated
-        # MEDIUM from one that was downgraded. The reason rides the provenance line.
-        dagger = "†" if a.scoring.confidence_downgraded_from else ""
-        canvas.drawCentredString(x + width / 2, y - 9, f"{a.ic_view.confidence}{dagger} confidence")
-
-    # --- Zone 2: left column -------------------------------------------------
-
-    def _left_column(
+    def _header(
         self,
         canvas: Canvas,
-        a: Assessment,
-        layout: Layout,
+        one_pager: OnePager,
         x: float,
         top: float,
         width: float,
-        floor: float,
+        threshold: float,
     ) -> None:
-        """Lay out the four blocks, distributing any leftover height between them.
+        """Logo left, name and tagline centre-left, sector/stage/HQ chips right."""
+        chips = self._chips(one_pager, threshold)
+        chip_width = self._chips_width(chips)
+        text_x = x
+        if s.LOGO_PATH.is_file():
+            logo_width = s.LOGO_HEIGHT * s.LOGO_RATIO
+            canvas.drawImage(
+                str(s.LOGO_PATH),
+                x,
+                top - s.LOGO_HEIGHT - 1,
+                width=logo_width,
+                height=s.LOGO_HEIGHT,
+                mask="auto",
+            )
+            text_x = x + logo_width + 14
 
-        Measured before it is drawn. A screening memo that under-fills its page should
-        breathe evenly rather than stack at the top and leave a dead band above the
-        footer — and the measurement is needed anyway to know whether it fits.
+        name_width = width - (text_x - x) - chip_width - 12
+        name = self._company(one_pager)
+        while stringWidth(name, s.SERIF_BOLD, s.SIZE_COMPANY) > name_width and len(name) > 4:
+            name = ellipsize(name, len(name) - 2)
+        canvas.setFillColor(s.INK)
+        canvas.setFont(s.SERIF_BOLD, s.SIZE_COMPANY)
+        canvas.drawString(text_x, top - s.SIZE_COMPANY + 1, name)
+
+        baseline = top - s.SIZE_COMPANY - 12
+        tagline = one_pager.tagline.value
+        cursor = text_x
+        if tagline:
+            canvas.setFillColor(s.MUTED)
+            canvas.setFont(s.SANS, s.SIZE_TAGLINE)
+            line = simpleSplit(tagline, s.SANS, s.SIZE_TAGLINE, name_width)[0]
+            canvas.drawString(cursor, baseline, line)
+            cursor += float(stringWidth(line, s.SANS, s.SIZE_TAGLINE))
+            if one_pager.tagline.is_low_confidence(threshold):
+                self._dagger(canvas, cursor, baseline)
+                cursor += 5
+
+        website = one_pager.website.value
+        if website:
+            canvas.setFillColor(s.MUTED)
+            canvas.setFont(s.SANS, s.SIZE_CHIP)
+            separator = "  ·  " if tagline else ""
+            canvas.drawString(cursor, baseline, f"{separator}{website}")
+            cursor += float(stringWidth(f"{separator}{website}", s.SANS, s.SIZE_CHIP))
+            if one_pager.website.is_low_confidence(threshold):
+                self._dagger(canvas, cursor, baseline)
+
+        self._draw_chips(canvas, chips, x + width, top - s.SIZE_COMPANY + 1)
+
+        canvas.setStrokeColor(s.ACCENT)
+        canvas.setLineWidth(s.RULE_WIDTH * 2)
+        rule_y = top - s.HEIGHT_HEADER + 10
+        canvas.line(x, rule_y, x + width, rule_y)
+
+    def _chips(self, one_pager: OnePager, threshold: float) -> list[str]:
+        """Sector · stage · HQ, skipping whatever the deck did not say.
+
+        A weak chip carries the dagger inline. The footer counts it, so it has to be
+        findable on the page.
         """
-        summary = _truncate_words(a.executive_summary, layout.summary_words)
-        risks = a.onepager_risks()
+        chips: list[str] = []
+        for field in (one_pager.sector, one_pager.stage, one_pager.hq_location):
+            if not field.value:
+                continue
+            text = ellipsize(str(field.value), 30)
+            if field.is_low_confidence(threshold):
+                text = f"{text}{s.DAGGER}"
+            chips.append(text)
+        return chips
 
-        blocks: list[tuple[str, float]] = [
-            ("summary", self._summary_height(summary, layout, width)),
-            ("strengths", self._bullets_height(a.ic_view.biggest_strengths[:3], layout, width)),
-            ("concerns", self._bullets_height(a.ic_view.biggest_concerns[:3], layout, width)),
-            ("risk", self._risk_height(risks, layout, width)),
+    def _chips_width(self, chips: list[str]) -> float:
+        """How much room the chip row needs, so the company name can have the rest."""
+        if not chips:
+            return 0.0
+        boxes = sum(float(stringWidth(c, s.SANS, s.SIZE_CHIP)) + 12 for c in chips)
+        return boxes + 5 * (len(chips) - 1)
+
+    def _draw_chips(self, canvas: Canvas, chips: list[str], right: float, y: float) -> None:
+        """Right-aligned, so the row stays flush to the margin however many there are."""
+        for chip in reversed(chips):
+            box_width = stringWidth(chip, s.SANS, s.SIZE_CHIP) + 12
+            left = right - box_width
+            canvas.setFillColor(s.TINT_ASK)
+            canvas.roundRect(left, y - 3, box_width, 14, 3, stroke=0, fill=1)
+            canvas.setFillColor(s.ACCENT)
+            canvas.setFont(s.SANS, s.SIZE_CHIP)
+            canvas.drawString(left + 6, y + 1, chip)
+            right = left - 5
+
+    # --- the ask ----------------------------------------------------------------------
+
+    def _ask_strip(
+        self,
+        canvas: Canvas,
+        one_pager: OnePager,
+        x: float,
+        top: float,
+        width: float,
+        threshold: float,
+    ) -> None:
+        """Five evenly spaced label-value cells on a tinted band (spec §9)."""
+        canvas.setFillColor(s.TINT_ASK)
+        canvas.rect(x, top - s.HEIGHT_ASK, width, s.HEIGHT_ASK, stroke=0, fill=1)
+
+        cells: list[tuple[str, Field[Any]]] = [
+            ("RAISE", one_pager.raise_amount_usd),
+            ("PRE-MONEY", one_pager.pre_money_valuation_usd),
+            ("INSTRUMENT", one_pager.instrument),
+            ("COMMITTED", one_pager.amount_committed_usd),
+            ("CLOSE", one_pager.close_date),
         ]
-        content = sum(height for _, height in blocks)
-        slack = max(0.0, (top - floor) - content)
-        # Cap the distributed gap: past ~28pt the blocks stop reading as one column.
-        gap = min(28.0, max(_MIN_BLOCK_GAP, slack / len(blocks)))
+        cell_width = width / len(cells)
+        for index, (label, field) in enumerate(cells):
+            cell_x = x + index * cell_width + 9
+            usable = cell_width - 18
 
-        y = top
-        for name, _height in blocks:
-            if name == "summary":
-                canvas.setFillColor(t.BLACK)
-                canvas.setFont(t.FONT, layout.body_pt)
-                leading = layout.body_pt * layout.line_height
-                for line in simpleSplit(summary, t.FONT, layout.body_pt, width):
-                    canvas.drawString(x, y, line)
-                    y -= leading
-            elif name == "strengths":
-                y = self._bullets(
-                    canvas, "TOP STRENGTHS", a.ic_view.biggest_strengths[:3], x, y, width, layout
+            canvas.setFillColor(s.MUTED)
+            canvas.setFont(s.SANS, s.SIZE_LABEL)
+            canvas.drawString(cell_x, top - 13, label)
+
+            value = field.value
+            text = money(value) if isinstance(value, int) else (
+                str(value) if value is not None else None
+            )
+            baseline = top - 28
+
+            if text is None:
+                canvas.setFillColor(s.MUTED)
+                canvas.setFont(s.SANS, s.SIZE_ASK_VALUE)
+                canvas.drawString(cell_x, baseline, s.EMPTY)
+                continue
+
+            # Shrink, then wrap, then clip. An amount stays on one line at full size; an
+            # instrument - `Convertible debt, 6% interest, 20% discount, $5M cap` - is the
+            # cell that needs two, and it is the cell a partner reads most carefully.
+            font = s.SERIF_BOLD
+            size = s.SIZE_ASK_VALUE
+            while float(stringWidth(text, font, size)) > usable and size > 7.5:
+                size -= 0.5
+            wrapped = simpleSplit(text, font, size, usable)
+            lines = wrapped[:2]
+            if len(wrapped) > 2 and lines:
+                # Say so. A cell that stops mid-clause without a mark reads as the whole
+                # of the deal terms, which is the one thing it must not do.
+                lines[-1] = ellipsize(lines[-1], max(len(lines[-1]) - 2, 4))
+
+            canvas.setFillColor(s.INK)
+            canvas.setFont(font, size)
+            leading = size * 1.05
+            first_baseline = baseline + (leading / 2 if len(lines) > 1 else 0)
+            for index, line in enumerate(lines):
+                canvas.drawString(cell_x, first_baseline - index * leading, line)
+            if field.is_low_confidence(threshold) and lines:
+                self._dagger(
+                    canvas,
+                    cell_x + float(stringWidth(lines[-1], font, size)),
+                    first_baseline - (len(lines) - 1) * leading,
                 )
-            elif name == "concerns":
-                y = self._bullets(
-                    canvas, "TOP CONCERNS", a.ic_view.biggest_concerns[:3], x, y, width, layout
+
+    def _dagger(self, canvas: Canvas, x: float, baseline: float) -> None:
+        """The low-confidence marker (spec §9), raised like a footnote reference."""
+        canvas.setFillColor(s.MUTED)
+        canvas.setFont(s.SANS, s.SIZE_DAGGER)
+        canvas.drawString(x + 1, baseline + s.DAGGER_RISE, s.DAGGER)
+
+    # --- shared blocks ----------------------------------------------------------------
+
+    def _heading(self, canvas: Canvas | None, x: float, top: float, text: str) -> float:
+        """A section heading. Returns the height consumed."""
+        if canvas is not None:
+            canvas.setFillColor(s.ACCENT)
+            canvas.setFont(s.SERIF_BOLD, s.SIZE_HEADING)
+            canvas.drawString(x, top - s.SIZE_HEADING, text)
+        return s.SIZE_HEADING + 4
+
+    def _paragraph(
+        self,
+        canvas: Canvas | None,
+        x: float,
+        top: float,
+        width: float,
+        text: str | None,
+        layout: PageLayout,
+        *,
+        low_confidence: bool = False,
+    ) -> float:
+        """Wrapped body text, or the em dash that means the deck was silent."""
+        leading = layout.body_pt * layout.leading
+        if text is None:
+            if canvas is not None:
+                canvas.setFillColor(s.MUTED)
+                canvas.setFont(s.SANS, layout.body_pt)
+                canvas.drawString(x, top - layout.body_pt, s.EMPTY)
+            return leading
+
+        lines = simpleSplit(self._scale(text, layout), s.SANS, layout.body_pt, width)
+        if canvas is not None:
+            canvas.setFillColor(s.INK)
+            canvas.setFont(s.SANS, layout.body_pt)
+            for index, line in enumerate(lines):
+                canvas.drawString(x, top - layout.body_pt - index * leading, line)
+            if low_confidence and lines:
+                self._dagger(
+                    canvas,
+                    x + stringWidth(lines[-1], s.SANS, layout.body_pt),
+                    top - layout.body_pt - (len(lines) - 1) * leading,
                 )
-            else:
-                self._risk_row(canvas, risks, layout, x, y, width)
-            y -= gap
+        return leading * len(lines)
 
-    # --- measurement, so the column can be balanced before it is drawn -------
-
-    def _summary_height(self, summary: str, layout: Layout, width: float) -> float:
-        lines = simpleSplit(summary, t.FONT, layout.body_pt, width)
-        return len(lines) * layout.body_pt * layout.line_height
-
-    def _bullets_height(self, items: list[str], layout: Layout, width: float) -> float:
-        leading = t.SIZE_BULLET * layout.line_height
-        height = t.SIZE_ZONE_HEADING + 3
-        for item in items:
-            height += leading * len(simpleSplit(item, t.FONT, t.SIZE_BULLET, width - 10)) + 1.5
-        return height + 7
-
-    def _risk_height(self, risks: list[Risk], layout: Layout, width: float) -> float:
-        height = t.SIZE_ZONE_HEADING + 4
-        for risk in risks:
-            lines = self._risk_reason_lines(risk, layout, width)
-            height += len(lines) * (t.SIZE_RISK * 1.25) + 4
-        return height
-
-    def _risk_reason_lines(self, risk: Risk, layout: Layout, width: float) -> list[str]:
-        """Wrap a risk reason to the available width. Never cut mid-word."""
-        reason = _first_clause(risk.rationale) if layout.short_risk_reasons else risk.rationale
-        reason_width = width - (9 + 92 + 42)
-        lines: list[str] = simpleSplit(reason, t.FONT, t.SIZE_RISK, reason_width)
-        return lines
+    def _section(
+        self,
+        canvas: Canvas | None,
+        x: float,
+        top: float,
+        width: float,
+        heading: str,
+        field: Field[str],
+        layout: PageLayout,
+        threshold: float,
+    ) -> float:
+        """Heading plus one paragraph — the shape of most of the left column."""
+        used = self._heading(canvas, x, top, heading)
+        used += self._paragraph(
+            canvas,
+            x,
+            top - used,
+            width,
+            field.value,
+            layout,
+            low_confidence=field.is_low_confidence(threshold),
+        )
+        return used + 8
 
     def _bullets(
         self,
-        canvas: Canvas,
-        heading: str,
-        items: list[str],
+        canvas: Canvas | None,
         x: float,
-        y: float,
+        top: float,
         width: float,
-        layout: Layout,
+        items: list[str],
+        layout: PageLayout,
     ) -> float:
-        canvas.setFillColor(t.BLUE)
-        canvas.setFont(t.FONT_BOLD, t.SIZE_ZONE_HEADING)
-        canvas.drawString(x, y, heading)
-        y -= t.SIZE_ZONE_HEADING + 3
-
-        canvas.setFillColor(t.BLACK)
-        leading = t.SIZE_BULLET * layout.line_height
+        """A bulleted list, wrapped and hanging-indented."""
+        leading = layout.body_pt * layout.leading
+        indent = 9.0
+        used = 0.0
         for item in items:
-            lines = simpleSplit(item, t.FONT, t.SIZE_BULLET, width - 10)
-            canvas.setFont(t.FONT_BOLD, t.SIZE_BULLET)
-            canvas.drawString(x, y, "·")
-            canvas.setFont(t.FONT, t.SIZE_BULLET)
-            for offset, line in enumerate(lines):
-                canvas.drawString(x + 8, y - offset * leading, line)
-            y -= leading * len(lines) + 1.5
-        return y - 7
+            lines = simpleSplit(self._scale(item, layout), s.SANS, layout.body_pt, width - indent)
+            if canvas is not None:
+                canvas.setFillColor(s.ACCENT)
+                canvas.setFont(s.SANS, layout.body_pt)
+                canvas.drawString(x, top - used - layout.body_pt, "•")
+                canvas.setFillColor(s.INK)
+                for index, line in enumerate(lines):
+                    canvas.drawString(
+                        x + indent, top - used - layout.body_pt - index * leading, line
+                    )
+            used += leading * len(lines) + 1.5
+        return used
 
-    def _risk_row(
+    # --- left column ------------------------------------------------------------------
+
+    def _left_column(
+        self,
+        canvas: Canvas | None,
+        one_pager: OnePager,
+        layout: PageLayout,
+        x: float,
+        top: float,
+        width: float,
+        threshold: float,
+    ) -> float:
+        """Problem, solution, model, go-to-market, use of funds (spec §9)."""
+        used = self._section(
+            canvas, x, top, width, "PROBLEM", one_pager.problem, layout, threshold
+        )
+        used += self._section(
+            canvas, x, top - used, width, "SOLUTION", one_pager.solution, layout, threshold
+        )
+
+        model = self._maybe_shorten(one_pager.business_model, layout.drop_business_model, 110)
+        used += self._section(
+            canvas, x, top - used, width, "BUSINESS MODEL", model, layout, threshold
+        )
+
+        gtm = self._maybe_shorten(one_pager.go_to_market, layout.drop_go_to_market, 110)
+        used += self._section(
+            canvas, x, top - used, width, "GO-TO-MARKET", gtm, layout, threshold
+        )
+
+        used += self._heading(canvas, x, top - used, "USE OF FUNDS")
+        funds = one_pager.use_of_funds.value or []
+        if funds:
+            used += self._bullets(canvas, x, top - used, width, funds, layout)
+        else:
+            used += self._paragraph(canvas, x, top - used, width, None, layout)
+        return used
+
+    @staticmethod
+    def _scale(text: str, layout: PageLayout) -> str:
+        """Apply the global truncation scale to one string (spec 3)."""
+        if layout.text_scale >= 1.0:
+            return text
+        return ellipsize(text, max(int(len(text) * layout.text_scale), 12))
+
+    @staticmethod
+    def _maybe_shorten(field: Field[str], drop: bool, limit: int) -> Field[str]:
+        """Apply a truncation rung to one field without mutating the source document."""
+        if not drop or not field.value:
+            return field
+        return field.model_copy(update={"value": ellipsize(field.value, limit)})
+
+    # --- right column -----------------------------------------------------------------
+
+    def _right_column(
+        self,
+        canvas: Canvas | None,
+        one_pager: OnePager,
+        layout: PageLayout,
+        x: float,
+        top: float,
+        width: float,
+        threshold: float,
+    ) -> float:
+        """Traction, market, team, competition (spec §9)."""
+        used = self._heading(canvas, x, top, "TRACTION")
+        metrics = (one_pager.traction_metrics.value or [])[: layout.metrics]
+        used += self._metric_tiles(canvas, x, top - used, width, metrics, layout)
+        used += 8
+
+        used += self._heading(canvas, x, top - used, "MARKET")
+        used += self._market(canvas, one_pager, x, top - used, width, layout, threshold)
+        used += 8
+
+        used += self._heading(canvas, x, top - used, "TEAM")
+        used += self._team(canvas, x, top - used, width, one_pager.team.value or [], layout)
+        used += 8
+
+        used += self._heading(canvas, x, top - used, "COMPETITION")
+        used += self._competition(canvas, one_pager, layout, x, top - used, width, threshold)
+        return used
+
+    def _metric_tiles(
+        self,
+        canvas: Canvas | None,
+        x: float,
+        top: float,
+        width: float,
+        metrics: list[Metric],
+        layout: PageLayout,
+    ) -> float:
+        """Traction as a 2-up grid of tiles (spec §9)."""
+        if not metrics:
+            return self._paragraph(canvas, x, top, width, None, layout)
+
+        gap = 6.0
+        tile_width = (width - gap) / 2
+        used = 0.0
+        for row in range((len(metrics) + 1) // 2):
+            pair = metrics[row * 2 : row * 2 + 2]
+            heights = [
+                self._tile(canvas, x + column * (tile_width + gap), top - used, tile_width, m, layout)
+                for column, m in enumerate(pair)
+            ]
+            used += max(heights) + gap
+        return used
+
+    def _tile(
+        self,
+        canvas: Canvas | None,
+        x: float,
+        top: float,
+        width: float,
+        metric: Metric,
+        layout: PageLayout,
+    ) -> float:
+        """One metric in a tile.
+
+        The schema allows a 120-character value, and real decks use it: `Working device:
+        feasibility and functionality proven` is a traction metric too. A tile that only
+        knows how to set big numerals clips those mid-word, so the type size follows the
+        value - display size for something numeral-shaped, body size for a sentence.
+        """
+        value = self._scale(metric.value, layout)
+        numeral = len(value) <= 16
+        font = s.SANS_BOLD
+        size = s.SIZE_METRIC_VALUE if numeral else s.SIZE_BODY
+        value_lines = simpleSplit(value, font, size, width - 12)[:3]
+
+        label = self._scale(metric.label, layout)
+        if metric.period:
+            label = f"{label} · {metric.period}"
+        label_lines = simpleSplit(label, s.SANS, s.SIZE_LABEL, width - 12)[:2]
+
+        leading_value = size * 1.16
+        leading_label = s.SIZE_LABEL * 1.3
+        top_pad = 6 + size
+        height = top_pad + leading_value * (len(value_lines) - 1) + 4
+        height += leading_label * len(label_lines) + 6
+
+        if canvas is not None:
+            canvas.setFillColor(s.TINT_ASK)
+            canvas.roundRect(x, top - height, width, height, 3, stroke=0, fill=1)
+            canvas.setFillColor(s.INK)
+            canvas.setFont(font, size)
+            for index, line in enumerate(value_lines):
+                canvas.drawString(x + 6, top - top_pad - index * leading_value, line)
+            canvas.setFillColor(s.MUTED)
+            canvas.setFont(s.SANS, s.SIZE_LABEL)
+            base = top - top_pad - leading_value * (len(value_lines) - 1) - 10
+            for index, line in enumerate(label_lines):
+                canvas.drawString(x + 6, base - index * leading_label, line)
+        return height
+
+    def _market(
+        self,
+        canvas: Canvas | None,
+        one_pager: OnePager,
+        x: float,
+        top: float,
+        width: float,
+        layout: PageLayout,
+        threshold: float,
+    ) -> float:
+        """TAM / SAM / SOM across one row, with the note beneath."""
+        cells = [
+            ("TAM", one_pager.tam_usd),
+            ("SAM", one_pager.sam_usd),
+            ("SOM", one_pager.som_usd),
+        ]
+        cell_width = width / 3
+        if canvas is not None:
+            for index, (label, field) in enumerate(cells):
+                cell_x = x + index * cell_width
+                canvas.setFillColor(s.MUTED)
+                canvas.setFont(s.SANS, s.SIZE_LABEL)
+                canvas.drawString(cell_x, top - 6, label)
+                text = money(field.value)
+                canvas.setFillColor(s.INK if text else s.MUTED)
+                canvas.setFont(s.SANS_BOLD, s.SIZE_ASK_VALUE)
+                canvas.drawString(cell_x, top - 19, text or s.EMPTY)
+                if text and field.is_low_confidence(threshold):
+                    self._dagger(
+                        canvas,
+                        cell_x + stringWidth(text, s.SANS_BOLD, s.SIZE_ASK_VALUE),
+                        top - 19,
+                    )
+        used = 23.0
+
+        note = self._maybe_shorten(one_pager.market_note, layout.drop_market_note, 90)
+        if note.value:
+            used += self._paragraph(
+                canvas,
+                x,
+                top - used,
+                width,
+                note.value,
+                layout,
+                low_confidence=note.is_low_confidence(threshold),
+            )
+        return used
+
+    def _team(
+        self,
+        canvas: Canvas | None,
+        x: float,
+        top: float,
+        width: float,
+        team: list[TeamMember],
+        layout: PageLayout,
+    ) -> float:
+        """One person per entry: name in bold, then role and background."""
+        team = team[: layout.people]
+        if not team:
+            return self._paragraph(canvas, x, top, width, None, layout)
+
+        leading = layout.body_pt * layout.leading
+        used = 0.0
+        for member in team:
+            if canvas is not None:
+                canvas.setFillColor(s.INK)
+                canvas.setFont(s.SANS_BOLD, layout.body_pt)
+                canvas.drawString(x, top - used - layout.body_pt, member.name)
+            name_width = stringWidth(member.name, s.SANS_BOLD, layout.body_pt)
+
+            detail = member.role
+            if member.background:
+                detail = f"{detail} — {member.background}"
+            lines = simpleSplit(self._scale(detail, layout), s.SANS, layout.body_pt, width - name_width - 6)
+            first, rest = (lines[0], lines[1:]) if lines else ("", [])
+            if canvas is not None:
+                canvas.setFillColor(s.MUTED)
+                canvas.setFont(s.SANS, layout.body_pt)
+                canvas.drawString(x + name_width + 6, top - used - layout.body_pt, first)
+                for index, line in enumerate(rest, start=1):
+                    canvas.drawString(x, top - used - layout.body_pt - index * leading, line)
+            used += leading * (1 + len(rest)) + 2
+        return used
+
+    def _competition(
+        self,
+        canvas: Canvas | None,
+        one_pager: OnePager,
+        layout: PageLayout,
+        x: float,
+        top: float,
+        width: float,
+        threshold: float,
+    ) -> float:
+        """Who else is here, then why this company says it wins."""
+        competitors = one_pager.competitors.value or []
+        if layout.drop_competitors:
+            competitors = competitors[:3]
+
+        used = self._paragraph(
+            canvas, x, top, width, " · ".join(competitors) if competitors else None, layout
+        )
+
+        differentiation = one_pager.differentiation
+        if differentiation.value:
+            used += 3
+            used += self._paragraph(
+                canvas,
+                x,
+                top - used,
+                width,
+                differentiation.value,
+                layout,
+                low_confidence=differentiation.is_low_confidence(threshold),
+            )
+        return used
+
+    # --- analyst block ----------------------------------------------------------------
+
+    def _analyst_block(
+        self,
+        canvas: Canvas | None,
+        one_pager: OnePager,
+        layout: PageLayout,
+        x: float,
+        top: float,
+        width: float,
+    ) -> float:
+        """Strengths, risks, and what to ask for — visibly not the founders' claims.
+
+        Tinted differently from the ask strip and labelled in italics, because the one thing
+        this block must never do is read as something the deck said.
+        """
+        columns = [
+            ("STRENGTHS", one_pager.key_strengths.value or []),
+            ("RISKS", one_pager.key_risks.value or []),
+            ("REQUEST FROM FOUNDER", (one_pager.missing_information.value or [])[: layout.requests]),
+        ]
+        gap = 10.0
+        column_width = (width - 2 * gap - 20) / 3
+        label_height = s.SIZE_LABEL + 10
+
+        heights: list[float] = []
+        for _, items in columns:
+            height = s.SIZE_HEADING + 4
+            for item in items:
+                lines = simpleSplit(self._scale(item, layout), s.SANS, layout.body_pt, column_width)
+                height += layout.body_pt * layout.leading * len(lines) + 2
+            heights.append(height)
+        total = label_height + (max(heights) if heights else 0.0) + 12
+
+        if canvas is not None:
+            canvas.setFillColor(s.TINT_ANALYST)
+            canvas.rect(x, top - total, width, total, stroke=0, fill=1)
+            canvas.setStrokeColor(s.ACCENT)
+            canvas.setLineWidth(s.RULE_WIDTH)
+            canvas.line(x, top, x + width, top)
+
+            canvas.setFillColor(s.MUTED)
+            canvas.setFont(s.SANS_ITALIC, s.SIZE_LABEL)
+            canvas.drawString(x + 10, top - 12, s.ANALYST_LABEL)
+
+            for index, (heading, items) in enumerate(columns):
+                column_x = x + 10 + index * (column_width + gap)
+                used = label_height
+                used += self._heading(canvas, column_x, top - used, heading)
+                for item in items:
+                    used += self._paragraph(
+                        canvas, column_x, top - used, column_width, item, layout
+                    )
+                    used += 2
+        return total
+
+    # --- footer -----------------------------------------------------------------------
+
+    def _footer(
         self,
         canvas: Canvas,
-        risks: list[Risk],
-        layout: Layout,
+        one_pager: OnePager,
         x: float,
-        y: float,
+        bottom: float,
         width: float,
+        threshold: float,
     ) -> None:
-        canvas.setFillColor(t.BLUE)
-        canvas.setFont(t.FONT_BOLD, t.SIZE_ZONE_HEADING)
-        canvas.drawString(x, y, "RISK")
-        y -= t.SIZE_ZONE_HEADING + 4
-
-        label_width = 92.0
-        for risk in risks:
-            canvas.setFillColor(t.RISK_FILL.get(risk.level, t.GREY))
-            canvas.rect(x, y - 0.5, 5, 5, stroke=0, fill=1)
-
-            canvas.setFillColor(t.BLACK)
-            canvas.setFont(t.FONT_BOLD, t.SIZE_RISK)
-            canvas.drawString(x + 9, y, risk.name)
-
-            canvas.setFillColor(t.RISK_FILL.get(risk.level, t.GREY))
-            canvas.drawString(x + 9 + label_width, y, risk.level.upper())
-
-            canvas.setFillColor(t.GREY)
-            canvas.setFont(t.FONT, t.SIZE_RISK)
-            reason_x = x + 9 + label_width + 42
-            lines = self._risk_reason_lines(risk, layout, width)
-            for offset, line in enumerate(lines):
-                canvas.drawString(reason_x, y - offset * (t.SIZE_RISK * 1.25), line)
-            y -= len(lines) * (t.SIZE_RISK * 1.25) + 4
-
-    # --- Zone 3: sidebar -----------------------------------------------------
-
-    def _sidebar(self, canvas: Canvas, a: Assessment, x: float, top: float, width: float) -> None:
-        y = top
-        canvas.setFillColor(t.BLUE)
-        canvas.setFont(t.FONT_BOLD, t.SIZE_ZONE_HEADING)
-        canvas.drawString(x, y, "SCORECARD")
-        y -= t.SIZE_ZONE_HEADING + 5
-
-        rows = [row for row in a.scorecard if row.name != "Overall Investability"]
-        for index, row in enumerate(rows):
-            y = self._score_row(canvas, row, x, y, width, zebra=index % 2 == 1)
-
-        y -= 10
-        self._overall(canvas, a, x, y, width)
-
-    def _score_row(
-        self, canvas: Canvas, row: Score, x: float, y: float, width: float, *, zebra: bool
-    ) -> float:
-        height = 13.0
-        if zebra:
-            canvas.setFillColor(t.ZEBRA_FILL)
-            canvas.rect(x - 2, y - 3, width + 4, height, stroke=0, fill=1)
-
-        canvas.setFillColor(t.BLACK)
-        canvas.setFont(t.FONT, t.SIZE_SCORE)
-        label = row.name
-        while canvas.stringWidth(label, t.FONT, t.SIZE_SCORE) > width - 62 and len(label) > 4:
-            label = label[:-2]
-        canvas.drawString(x, y, label)
-
-        if row.value is None:
-            canvas.setFillColor(t.GREY)
-            canvas.setFont(t.FONT_ITALIC, t.SIZE_SCORE - 0.5)
-            canvas.drawRightString(x + width, y, INSUFFICIENT)
-            return y - height
-
-        track_x = x + width - 58
-        track_width = 36.0
-        canvas.setFillColor(t.ZEBRA_FILL if not zebra else t.WHITE)
-        canvas.rect(track_x, y - 0.5, track_width, 5, stroke=0, fill=1)
-        canvas.setFillColor(t.NAVY)
-        canvas.rect(track_x, y - 0.5, track_width * (row.value / 10.0), 5, stroke=0, fill=1)
-
-        canvas.setFont(t.FONT_BOLD, t.SIZE_SCORE)
-        canvas.drawRightString(x + width, y, f"{row.value}/10")
-        return y - height
-
-    def _overall(self, canvas: Canvas, a: Assessment, x: float, y: float, width: float) -> None:
-        """The headline figure: the weighted score, not the model's own number."""
-        canvas.setStrokeColor(t.RULE_LIGHT)
-        canvas.setLineWidth(t.RULE_WIDTH)
-        canvas.line(x, y + 20, x + width, y + 20)
-
-        canvas.setFillColor(t.BLUE)
-        canvas.setFont(t.FONT_BOLD, t.SIZE_ZONE_HEADING)
-        canvas.drawString(x, y + 6, "OVERALL INVESTABILITY")
-
-        score = a.headline_score()
-        text = f"{score:.1f}" if score is not None else "—"
-        if a.scoring.score_divergence:
-            text += "†"
-        canvas.setFont(t.FONT_BOLD, t.SIZE_OVERALL)
-        canvas.drawString(x, y - t.SIZE_OVERALL + 4, text)
-
-        canvas.setFillColor(t.GREY)
-        canvas.setFont(t.FONT, t.SIZE_CONFIDENCE)
+        """The provenance rule, plus the count of flagged fields (spec §9)."""
+        provenance = one_pager.provenance
+        canvas.setFillColor(s.MUTED)
+        canvas.setFont(s.SANS, s.SIZE_FOOTER)
         canvas.drawString(
-            x + canvas.stringWidth(text, t.FONT_BOLD, t.SIZE_OVERALL) + 5,
-            y - t.SIZE_OVERALL + 8,
-            "/ 10",
+            x,
+            bottom,
+            s.FOOTER_TEMPLATE.format(
+                filename=provenance.source_filename,
+                date=provenance.extracted_at.strftime("%d %b %Y"),
+            ),
         )
 
-    # --- Zone 4: footer ------------------------------------------------------
-
-    def _footer(self, canvas: Canvas, a: Assessment, layout: Layout, width: float) -> float:
-        """Diligence questions above the provenance line. Returns the y they start at."""
-        usable = width - 2 * t.MARGIN
-        y = t.MARGIN
-
-        self._provenance(canvas, a, t.MARGIN, y, usable)
-        y += t.SIZE_PROVENANCE + 7
-
-        canvas.setStrokeColor(t.RULE_LIGHT)
-        canvas.setLineWidth(t.RULE_WIDTH)
-        canvas.line(t.MARGIN, y, width - t.MARGIN, y)
-        y += 8
-
-        questions = [
-            q.question for q in a.ic_view.diligence_questions[: layout.diligence_questions]
-        ]
-        leading = t.SIZE_QUESTION * 1.3
-        for number, question in reversed(list(enumerate(questions, start=1))):
-            # One line each: the footer is a fixed-height band, and a question that wraps
-            # would push the provenance line off the page. Ellipsized at a word boundary
-            # so a cut question reads as cut rather than as a sentence that stops.
-            lines = simpleSplit(question, t.FONT, t.SIZE_QUESTION, usable - 14)
-            text = lines[0] if len(lines) == 1 else _cut_words(question, len(lines[0].split()) - 1)
-            canvas.setFillColor(t.NAVY)
-            canvas.setFont(t.FONT_BOLD, t.SIZE_QUESTION)
-            canvas.drawString(t.MARGIN, y, f"{number}.")
-            canvas.setFillColor(t.BLACK)
-            canvas.setFont(t.FONT, t.SIZE_QUESTION)
-            canvas.drawString(t.MARGIN + 14, y, text)
-            y += leading
-
-        canvas.setFillColor(t.BLUE)
-        canvas.setFont(t.FONT_BOLD, t.SIZE_ZONE_HEADING)
-        canvas.drawString(t.MARGIN, y, "DILIGENCE QUESTIONS")
-        return y + t.SIZE_ZONE_HEADING + 6
-
-    def _provenance(self, canvas: Canvas, a: Assessment, x: float, y: float, width: float) -> None:
-        """The line that makes the artifact auditable. Never abbreviated to fit."""
-        canvas.setFillColor(t.GREY)
-        canvas.setFont(t.FONT, t.SIZE_PROVENANCE)
-        for offset, line in enumerate(
-            simpleSplit(" · ".join(self._provenance_parts(a)), t.FONT, t.SIZE_PROVENANCE, width)
-        ):
-            canvas.drawString(x, y - offset * (t.SIZE_PROVENANCE * 1.25), line)
-
-    def _provenance_parts(self, a: Assessment) -> list[str]:
-        meta = a.meta
-        parts = [
-            meta.source_filename,
-            f"sha256 {meta.sha256[:12]}" if meta.sha256 else "sha256 unavailable",
-            f"{meta.slide_count} slides",
-            f"{meta.model} via {meta.provider}",
-            meta.generated_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            self._evidence_summary(a),
-        ]
-        if note := a.scoring.divergence_note:
-            parts.append(note)
-        if reason := a.scoring.confidence_downgrade_reason:
-            parts.append(f"confidence capped: {reason}")
-        return parts
-
-    def _evidence_summary(self, a: Assessment) -> str:
-        """`Evidence: n claims — v verified / i inferred / s speculative`."""
-        claims = a.all_evidence()
-        verified = sum(1 for c in claims if c.basis == "FACT")
-        inferred = sum(1 for c in claims if c.basis == "INFERENCE")
-        speculative = sum(1 for c in claims if c.basis == "SPECULATION")
-        return (
-            f"Evidence: {len(claims)} claims — {verified} verified / "
-            f"{inferred} inferred / {speculative} speculative"
+        shown = set(RENDERED_FIELDS)
+        weak = sum(
+            1 for name in one_pager.low_confidence_fields(threshold) if name in shown
         )
+        if weak:
+            footnote = s.DAGGER_FOOTNOTE.format(dagger=s.DAGGER, threshold=threshold)
+            canvas.drawRightString(x + width, bottom, f"{weak} field(s) {footnote}")
+
+
+def _restore_what_was_not_needed(
+    layout: PageLayout,
+    applied: list[dict[str, Any]],
+    measure: Callable[[PageLayout], float],
+) -> PageLayout:
+    """Undo any reduction the page turns out not to need.
+
+    The rungs are coarse - one diligence request is about 20 points - so the first layout
+    that fits usually overshoots and leaves a band of white above the analyst block. Each
+    applied reduction is offered back, newest first, and kept only if the page still fits
+    without it. Cheap: a handful of measurements, no rendering.
+    """
+    defaults = PageLayout()
+    for change in reversed(applied):
+        restored = replace(layout, **{k: getattr(defaults, k) for k in change})
+        if measure(restored) <= 0:
+            layout = restored
+    return layout
+
+def fit_and_render(
+    one_pager: OnePager,
+    destination: Path,
+    *,
+    paper: Paper = "letter",
+    threshold: float = DEFAULT_MIN_CONFIDENCE,
+    renderer: OnePagerRenderer | None = None,
+) -> tuple[Path, list[str]]:
+    """Reduce until the content fits, then render once. Returns the file and what was cut.
+
+    The ladder is spec §9's, and the reductions are measured rather than hoped for: each
+    rung is applied, the overflow re-measured, and only the layout that actually fits is
+    written to disk. If every rung is spent and it still overflows, that is an error — a
+    two-page one-pager is the silent failure this exists to prevent.
+    """
+    engine = renderer or OnePagerRenderer()
+
+    def measure(candidate: PageLayout) -> float:
+        return engine.overflow(one_pager, candidate, paper=paper, threshold=threshold)
+
+    def draw(candidate: PageLayout) -> Path:
+        return engine.render(
+            one_pager, destination, paper=paper, layout=candidate, threshold=threshold
+        )
+
+    layout = PageLayout()
+    applied: list[dict[str, Any]] = []
+    excess = measure(layout)
+    if excess <= 0:
+        return draw(layout), []
+
+    # Spec 9 order: prose an analyst can infer goes first, typography last. A rung that
+    # does not reduce the overflow is reverted rather than kept, because the page is two
+    # independent columns and most rungs only shorten one of them. Keeping an ineffective
+    # rung would throw away the go-to-market line to relieve pressure in the right column,
+    # which costs the reader a section and buys nothing.
+    for change in (
+        {"drop_go_to_market": True},
+        {"drop_business_model": True},
+        {"drop_competitors": True},
+        {"drop_market_note": True},
+        {"requests": 4},
+        {"requests": 3},
+        {"metrics": 5},
+        {"metrics": 4},
+        {"people": 3},
+        {"body_pt": 7.5},
+        {"leading": 1.18},
+        {"text_scale": 0.75},
+        {"text_scale": 0.55},
+        {"text_scale": 0.4},
+        {"text_scale": 0.28},
+        {"text_scale": 0.18},
+        {"text_scale": 0.12},
+    ):
+        candidate = replace(layout, **change)
+        reduced = measure(candidate)
+        if reduced >= excess:
+            continue
+        layout, excess = candidate, reduced
+        applied.append(change)
+        if excess <= 0:
+            layout = _restore_what_was_not_needed(layout, applied, measure)
+            return draw(layout), layout.describe()
+
+    tried = '; '.join(layout.describe())
+    raise RenderError(
+        f"The one-pager still overflows by {excess:.0f}pt with every reduction applied. "
+        f"Tried, in order: {tried}. "
+        f"The content is too long for one page at a readable size - the usual cause is a "
+        f"problem or solution far over the character limits. Check the extraction JSON."
+    )

@@ -19,7 +19,7 @@ from deckpager.analysis.schema import SCORECARD_ORDER, Assessment, AssessmentDra
 from deckpager.errors import OnePagerOverflowError
 from deckpager.render.base import Layout
 from deckpager.render.fit import fit_to_one_page
-from deckpager.render.onepager import OnePagerRenderer, _first_clause, _truncate_words
+from deckpager.render.legacy_onepager import OnePagerRenderer, _first_clause, _truncate_words
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
