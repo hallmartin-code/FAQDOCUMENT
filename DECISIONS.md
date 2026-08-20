@@ -789,3 +789,43 @@ Resend rejects any send from an unverified domain, so tencapital.group needs its
 records published before anything arrives. The rejection is reported back with Resend own
 explanation, which is the only place that particular failure is legible. The README says
 so, and names onboarding@resend.dev as the way to test the wiring first.
+
+---
+
+## deckpager - The upload UI
+
+### DP51. The operator design was adopted, not reinterpreted
+
+web/index.html is the design supplied by the operator: navy field, tri-colour ambient
+glow echoing the three figures in the logo, Sora and Inter and JetBrains Mono, the
+coral-to-amber CTA. The palette, type, spacing, and copy are theirs. What was added is
+the half the mock did not cover - a progress state, a result panel, and an error state -
+built in the same vocabulary rather than in a different one.
+
+Font faces now carry real fallback stacks. The page is served from Railway and the fonts
+from Google; a blocked or slow font host must not decide the layout.
+
+### DP52. Three things in the mock said what the server does not do
+
+All three were corrections, not preferences:
+
+1. The accepted types were `.pptx .pdf .docx`. The ingest layer has never read .docx, and
+   it does read .ppt. The list, the accept attribute, and the client-side check now all
+   come from SUPPORTED_SUFFIXES, so the page cannot advertise a format the router refuses.
+
+2. The disclosure hardcoded a personal gmail address as the recipient, and asserted the
+   email happens at all. Emailing is off unless RESEND_API_KEY is set, and the recipient
+   is configuration. The page now states what the running deployment will actually do, or
+   says plainly that nothing is emailed.
+
+3. The retention window was not mentioned. It is now, from JOB_TTL rather than prose.
+
+A test asserts every placeholder is substituted and that .docx never appears. A page that
+promises what the server refuses is worse than no page.
+
+### DP53. Two defects in the mock CSS, fixed
+
+The tri-colour accent bar sat at `top:-2px` inside an `overflow:hidden` card, so it never
+rendered - visible only once the page was screenshotted. And the finished progress bar was
+left at 100 percent, where a full-width rule across the card reads as a divider somebody
+drew on purpose; it now hides on completion.

@@ -50,6 +50,11 @@ def stub_run(monkeypatch: pytest.MonkeyPatch, module: Any, **overrides: Any) -> 
         one_pager = SimpleNamespace(
             company_name=SimpleNamespace(value=overrides.get("company", "Helion Bio")),
             tagline=SimpleNamespace(value="Reprogramming macrophages"),
+            raise_amount_usd=SimpleNamespace(value=4_000_000),
+            pre_money_valuation_usd=SimpleNamespace(value=16_000_000),
+            amount_committed_usd=SimpleNamespace(value=1_100_000),
+            stage=SimpleNamespace(value="Seed"),
+            close_date=SimpleNamespace(value="Q3 2026"),
             low_confidence_fields=lambda _t: overrides.get("flagged", ["website"]),
             is_pitch_deck=overrides.get("is_pitch_deck", True),
             provenance=SimpleNamespace(ingest_warnings=[], citation_warnings=[]),
@@ -257,6 +262,16 @@ class TestEmailReporting:
         assert "403" in payload["emailed"]
         assert client.get(f"/api/jobs/{job_id}/pdf").status_code == 200
 
+    def test_the_ask_reaches_the_result_panel(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The panel shows the same five cells as the PDF ask strip."""
+        stub_run(monkeypatch, client.module)  # type: ignore[attr-defined]
+        payload = wait_for_done(client, upload(client).json()["id"])
+        labels = [label for label, _ in payload["facts"]]
+        assert labels == ["Raise", "Pre-money", "Committed", "Stage", "Close"]
+        assert [v for _, v in payload["facts"]] == ["$4M", "$16M", "$1.1M", "Seed", "Q3 2026"]
+
 class TestLeakage:
     def test_the_job_payload_carries_no_path_and_no_key(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
@@ -317,7 +332,48 @@ class TestIndexPage:
         assert str(client.module.MAX_UPLOAD_MB) in html  # type: ignore[attr-defined]
         for suffix in (".pdf", ".pptx", ".ppt"):
             assert suffix in html
-        assert "__ACCEPT__" not in html and "__MAX_MB__" not in html
+
+    def test_the_page_does_not_advertise_a_format_the_router_rejects(
+        self, client: TestClient
+    ) -> None:
+        """The design mock offered .docx; the ingest layer has never accepted it."""
+        assert ".docx" not in client.get("/").text
+
+    def test_every_placeholder_is_substituted(self, client: TestClient) -> None:
+        html = client.get("/").text
+        for token in (
+            "__ACCEPT__",
+            "__ACCEPT_JSON__",
+            "__ACCEPT_LABEL__",
+            "__MAX_MB__",
+            "__MAX_BYTES__",
+            "__VERSION__",
+            "__AUTH__",
+            "__EMAIL_DISCLOSURE__",
+            "__TTL_HOURS__",
+        ):
+            assert token not in html, f"{token} was never substituted"
 
     def test_the_page_says_whether_access_is_controlled(self, client: TestClient) -> None:
         assert "<code>off</code>" in client.get("/").text
+
+    def test_an_unconfigured_deployment_does_not_promise_email(
+        self, client: TestClient
+    ) -> None:
+        """The mock hardcoded a recipient. A page must not claim a send that cannot happen."""
+        html = client.get("/").text
+        assert "Nothing is emailed" in html
+        assert "@" not in html.split("disclosure")[1].split("</div>")[0]
+
+    def test_a_configured_deployment_names_the_real_recipient(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("RESEND_API_KEY", "re_test")
+        monkeypatch.setenv("JOBS_DIR", str(tmp_path / "jobs"))
+        import importlib
+
+        import app as app_module
+
+        module = importlib.reload(app_module)
+        with TestClient(module.app) as configured:
+            assert "Info@tencapital.group" in configured.get("/").text

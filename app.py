@@ -83,6 +83,8 @@ class Job:
     warnings: list[str] = field(default_factory=list)
     is_pitch_deck: bool = True
     emailed: str | None = None
+    emailed_ok: bool = False
+    facts: list[tuple[str, str | None]] = field(default_factory=list)
 
     @property
     def directory(self) -> Path:
@@ -103,6 +105,8 @@ class Job:
             "warnings": self.warnings,
             "is_pitch_deck": self.is_pitch_deck,
             "emailed": self.emailed,
+            "emailed_ok": self.emailed_ok,
+            "facts": self.facts,
         }
 
 
@@ -172,6 +176,18 @@ def healthz() -> dict[str, Any]:
     }
 
 
+def _facts(one_pager: Any) -> list[tuple[str, str | None]]:
+    """The ask, for the result panel. The same five cells the PDF ask strip carries."""
+    from deckpager.render.onepager import money
+
+    return [
+        ("Raise", money(one_pager.raise_amount_usd.value)),
+        ("Pre-money", money(one_pager.pre_money_valuation_usd.value)),
+        ("Committed", money(one_pager.amount_committed_usd.value)),
+        ("Stage", one_pager.stage.value),
+        ("Close", one_pager.close_date.value),
+    ]
+
 def _run_job(job: Job, deck_path: Path, paper: str, min_confidence: float) -> None:
     """The run itself, in a worker thread. Never touches the event loop."""
     from deckpager.pipeline import run
@@ -206,8 +222,10 @@ def _run_job(job: Job, deck_path: Path, paper: str, min_confidence: float) -> No
             one_pager.provenance.citation_warnings
         )
         job.is_pitch_deck = one_pager.is_pitch_deck
+        job.facts = _facts(one_pager)
         if result.email is not None:
             job.emailed = result.email.detail
+            job.emailed_ok = result.email.sent
         job.stage = "done"
     except DeckpagerError as exc:
         job.stage, job.error = "failed", str(exc)
@@ -312,11 +330,20 @@ def download(job_id: str, artifact: str) -> FileResponse:
 def index() -> str:
     """The upload page, with its limits substituted from the live configuration.
 
-    A page that advertises a file type the router rejects, or a size cap the server does
-    not enforce, is worse than no page at all — so both come from the same values used
-    above rather than being written into the HTML.
+    A page that advertises a file type the router rejects, a size cap the server does
+    not enforce, or an email nobody configured is worse than no page at all — so the
+    accepted types, the limits, the retention window, and the mail disclosure all come
+    from the same values the server uses, rather than being written into the HTML.
     """
+
     accept = sorted(SUPPORTED_SUFFIXES)
+    settings = load_settings()
+    disclosure = (
+        f"A copy of every generated one-pager is emailed to "
+        f"<code>{settings.report_email_to}</code>."
+        if settings.email_enabled
+        else "Nothing is emailed: no Resend key is configured on this deployment."
+    )
     html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
     for token, value in {
         "__ACCEPT__": ",".join(accept),
@@ -326,6 +353,8 @@ def index() -> str:
         "__MAX_BYTES__": str(MAX_UPLOAD_BYTES),
         "__VERSION__": __version__,
         "__AUTH__": "on" if APP_PASSWORD else "off",
+        "__EMAIL_DISCLOSURE__": disclosure,
+        "__TTL_HOURS__": f"{JOB_TTL.total_seconds() / 3600:.0f}",
     }.items():
         html = html.replace(token, value)
     return html
