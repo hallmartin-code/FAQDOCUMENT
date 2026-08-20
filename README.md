@@ -1,4 +1,4 @@
-# pitchlens
+# deckpager
 
 Turns a pitch deck into a one-page investment screening memo whose every factual claim has
 been checked against the deck's own text.
@@ -21,19 +21,19 @@ Outputs, per run:
 ## 60-second quickstart
 
 ```bash
-git clone <this repo> && cd pitchlens
+git clone <this repo> && cd deckpager
 python -m venv .venv && .venv/Scripts/activate      # macOS/Linux: source .venv/bin/activate
 pip install -e ".[dev]"
 
 # Render a one-pager with no API key and no network at all:
-pitchlens render tests/fixtures/sample_assessment.json -o ./demo
+deckpager render tests/fixtures/sample_assessment.json -o ./demo
 
 # Analyze a real deck (needs a key):
 echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
-pitchlens analyze path/to/deck.pdf
+deckpager analyze path/to/deck.pdf
 ```
 
-`pitchlens render` is the fast loop: it re-renders a saved analysis with no model call, so
+`deckpager render` is the fast loop: it re-renders a saved analysis with no model call, so
 layout work costs nothing.
 
 ---
@@ -41,11 +41,11 @@ layout work costs nothing.
 ## CLI
 
 ```
-pitchlens analyze DECK [-o STEM] [--paper letter|a4] [--context TEXT]
+deckpager analyze DECK [-o STEM] [--paper letter|a4] [--context TEXT]
                        [--provider anthropic|fake] [--model NAME] [--no-images] [--json PATH]
-pitchlens render ANALYSIS.json [-o STEM] [--paper letter|a4]
-pitchlens providers
-pitchlens version
+deckpager render ANALYSIS.json [-o STEM] [--paper letter|a4]
+deckpager providers
+deckpager version
 ```
 
 `--context` is background for the analyst — an intro source, a stage, a prior conversation.
@@ -102,8 +102,8 @@ Optional variables, all with working defaults:
 | `REPORT_EMAIL_TO` | *(unset)* | Email a copy of every one-pager here. Unset = no email. |
 | `SMTP_HOST` / `SMTP_FROM` | *(unset)* | Required when `REPORT_EMAIL_TO` is set. |
 | `SMTP_USER` / `SMTP_PASSWORD` | *(unset)* | SMTP auth. Gmail needs an App Password. |
-| `PITCHLENS_MODEL` | `claude-opus-5` | Overrides `config/default.toml`. |
-| `PITCHLENS_EFFORT` | `high` | `low` is much faster and cheaper; quality drops. |
+| `DECKPAGER_MODEL` | `claude-opus-5` | Overrides `config/default.toml`. |
+| `DECKPAGER_EFFORT` | `high` | `low` is much faster and cheaper; quality drops. |
 
 > **This deployment is configured open.** With `APP_PASSWORD` unset, anyone who reaches the
 > URL can upload a deck and spend your Anthropic credits, and Railway domains are
@@ -146,7 +146,7 @@ ReportLab will happily paint past the bottom edge without ever starting a second
 | `prompts/analyst_system.md` | The venture-partner persona. Edit it without touching Python. |
 | `templates/onepager.md` | The document structure: zones, fields, formatting, vocabularies. |
 
-Settings resolve highest-precedence first: CLI flag → `PITCHLENS_*` environment variable →
+Settings resolve highest-precedence first: CLI flag → `DECKPAGER_*` environment variable →
 `.env` → `config/default.toml` → the field default.
 
 ---
@@ -154,7 +154,7 @@ Settings resolve highest-precedence first: CLI flag → `PITCHLENS_*` environmen
 ## Troubleshooting
 
 **`ANTHROPIC_API_KEY is not set`** — put it in `.env` beside the project, or export it. Run
-`pitchlens providers` to see what the app thinks is configured.
+`deckpager providers` to see what the app thinks is configured.
 
 **A run failed with a schema error after two attempts** — the model wrote past a field's
 length ceiling twice. The limits are generated into the prompt from the schema, so this

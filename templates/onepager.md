@@ -1,6 +1,6 @@
 # TEN Capital — Investment Screening One-Pager Template
 
-Structure and field map for every one-pager the pitchlens app generates. Company-agnostic:
+Structure and field map for every one-pager the deckpager app generates. Company-agnostic:
 nothing here is specific to a deck, a company, or a run. The renderer owns *structure and
 formatting only*; all content arrives through the data contract in §4.
 
@@ -10,7 +10,7 @@ discipline. The **field set is different**: that document critiques a deck secti
 this one states an investment view. The document map, formatting spec, and validation contract
 carry over; the deck-section / design-dimension / slide-outline vocabularies do not.
 
-To be implemented in `src/pitchlens/render/onepager_template.py` (milestone M2). Running that
+To be implemented in `src/deckpager/render/onepager_template.py` (milestone M2). Running that
 module writes `_onepager_preview.pdf`, an empty copy of the layout, so the design can be
 inspected with no API call and no deck.
 
@@ -126,7 +126,7 @@ a default the layout was not measured against.
 
 ## 4. Fields, by zone
 
-Every field below maps to a path in the validated `Assessment` (`src/pitchlens/analysis/schema.py`).
+Every field below maps to a path in the validated `Assessment` (`src/deckpager/analysis/schema.py`).
 The renderer reads only from this contract — it never reformats, re-ranks, or re-words. Anything
 the model did not supply renders as a defined empty state, never as an invented value.
 
@@ -222,7 +222,7 @@ a rung on the fitting ladder — the exec summary loses words before the provena
 
 ### 4.5 Fixed vocabularies
 
-The canonical lists live in `src/pitchlens/analysis/schema.py` as `SCORECARD_ORDER` and
+The canonical lists live in `src/deckpager/analysis/schema.py` as `SCORECARD_ORDER` and
 `RISK_ORDER`, and in `config/weights.toml`. Change the framework there and both the skeleton and
 the rendered document follow. Never restate them in the renderer.
 
@@ -316,7 +316,7 @@ so the chip has three states and the schema grows an enum to match.
 
 ```python
 from pathlib import Path
-from pitchlens.render.onepager_template import (
+from deckpager.render.onepager_template import (
     blank_onepager_data,
     build_onepager,
     validate_onepager_data,

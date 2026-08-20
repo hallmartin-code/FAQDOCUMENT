@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pitchlens"
+name = "deckpager"
 version = "0.1.0"
-description = "Investment-grade pitch deck due diligence engine"
+description = "Pitch deck to a one-page TEN Capital investor one-pager"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Proprietary" }
@@ -13,23 +13,23 @@ authors = [{ name = "TEN Capital Network" }]
 
 dependencies = [
     "anthropic>=0.40",       # Claude API client (tool-use + native PDF document blocks)
-    "pydantic>=2",           # single source of truth for the Assessment schema
+    "pydantic>=2",           # single source of truth for the OnePager schema
     "pydantic-settings>=2",  # env/.env config binding
     "typer>=0.12",           # CLI
     "rich>=13",              # progress output
-    "pymupdf>=1.24",         # PDF text extraction + page rasterization
+    "pymupdf>=1.24",         # PDF page rasterization
+    "pdfplumber>=0.11",      # PDF text and table extraction
     "python-pptx>=1.0",      # PPTX text/notes extraction
-    "reportlab>=4.1",        # PDF rendering
-    "python-docx>=1.1",      # DOCX rendering (Python lib, NOT the docx npm package)
+    "reportlab>=4.1",        # PDF rendering (default engine)
     "python-dotenv>=1.0",    # .env loading for the CLI
 ]
 
 [project.optional-dependencies]
-# The deployed web app. Kept out of the core install so the CLI stays lean.
-web = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
-    "python-multipart>=0.0.9",  # required by FastAPI for multipart file uploads
+# The WeasyPrint engine. Kept optional because it needs the GTK stack (pango, cairo,
+# gdk-pixbuf) present as native libraries; `deckpager check` reports when it is not.
+weasyprint = [
+    "weasyprint>=62",
+    "jinja2>=3.1",
 ]
 dev = [
     "pytest>=8",
@@ -37,15 +37,13 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
     "pypdf>=4.2",  # page counting / text extraction of rendered PDFs
-    "httpx>=0.27",  # FastAPI's TestClient transport
-    "pitchlens[web]",
 ]
 
 [project.scripts]
-pitchlens = "pitchlens.cli:app"
+deckpager = "deckpager.cli:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/pitchlens"]
+packages = ["src/deckpager"]
 
 [tool.ruff]
 line-length = 100
@@ -56,26 +54,16 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["E501"]
 
-[tool.ruff.lint.flake8-bugbear]
-# FastAPI's whole dependency-injection idiom is a call in an argument default, which B008
-# exists to catch elsewhere. Declaring them immutable is the documented fix and beats
-# scattering noqa comments across every route.
-extend-immutable-calls = [
-    "fastapi.Depends",
-    "fastapi.File",
-    "fastapi.Form",
-    "fastapi.Query",
-    "fastapi.Header",
-]
-
 [tool.mypy]
 python_version = "3.11"
-packages = ["pitchlens"]
+packages = ["deckpager"]
 mypy_path = "src"
-strict = false
+strict = true
 warn_unused_ignores = true
 warn_redundant_casts = true
-disallow_untyped_defs = true
+# PyMuPDF and python-pptx ship unannotated callables. This exempts calls *into* those
+# packages from --strict's untyped-call rule; our own code stays fully checked.
+untyped_calls_exclude = ["pymupdf", "pptx"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -83,4 +71,4 @@ testpaths = ["tests"]
 addopts = "-q"
 
 [tool.coverage.run]
-source = ["pitchlens"]
+source = ["deckpager"]

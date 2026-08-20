@@ -1,22 +1,22 @@
-# pitchlens defaults.
+# deckpager defaults.
 #
-# Lowest-precedence layer. Anything here is overridden by a PITCHLENS_* environment
+# Lowest-precedence layer. Anything here is overridden by a DECKPAGER_* environment
 # variable, by .env, and by a command-line flag, in that order — so this file is the
 # house default, not a lock.
 #
-# Every key below is read by src/pitchlens/config.py. Keys for features that do not exist
+# Every key below is read by src/deckpager/config.py. Keys for features that do not exist
 # yet are deliberately absent; they arrive with the milestone that consumes them.
 
 [provider]
 # Which LLM backend to use: anthropic, openai, ollama, or fake.
 # `fake` replays a recorded fixture and never touches the network — it is what the test
 # suite and offline layout work run against.
-# Override: --provider on the CLI, or PITCHLENS_PROVIDER.
+# Override: --provider on the CLI, or DECKPAGER_PROVIDER.
 name = "anthropic"
 
 [model]
 # Model ID. Never hard-coded at a call site; it is always read from here.
-# Override: --model, or PITCHLENS_MODEL.
+# Override: --model, or DECKPAGER_MODEL.
 name = "claude-opus-5"
 
 # Output token ceiling for one assessment. Adaptive thinking is on by default on the

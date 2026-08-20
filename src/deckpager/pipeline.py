@@ -13,18 +13,18 @@ from typing import cast
 from pydantic import ValidationError
 from rich.console import Console
 
-from pitchlens.analysis.client import Analyzer, AnthropicAnalyzer
-from pitchlens.analysis.grounding import ground
-from pitchlens.analysis.schema import Assessment, RunMeta
-from pitchlens.config import Settings, load_settings
-from pitchlens.errors import ConfigError, PitchlensError, RenderError, SchemaValidationError
-from pitchlens.ingest.router import load_deck
-from pitchlens.render.base import Paper
+from deckpager.analysis.client import Analyzer, AnthropicAnalyzer
+from deckpager.analysis.grounding import ground
+from deckpager.analysis.schema import Assessment, RunMeta
+from deckpager.config import Settings, load_settings
+from deckpager.errors import ConfigError, DeckpagerError, RenderError, SchemaValidationError
+from deckpager.ingest.router import load_deck
+from deckpager.render.base import Paper
 
 _SLUG_STRIP = re.compile(r"[^\w\s-]")
 _SLUG_SPACE = re.compile(r"[\s_-]+")
 
-#: pitchlens outputs are a one-page PDF, an optional multi-page memo, and the JSON.
+#: deckpager outputs are a one-page PDF, an optional multi-page memo, and the JSON.
 #: The .docx path was deckdd's format and is not part of this product.
 VALID_PAPER = ("letter", "a4")
 
@@ -85,7 +85,7 @@ def analyze_deck(
         raise ConfigError(
             f"--provider {settings.provider} is not wired into the analysis pipeline yet "
             f"(the adapters arrive in milestones M2 and M3).\n"
-            f"Run with --provider anthropic, or `pitchlens providers` to see the state of each."
+            f"Run with --provider anthropic, or `deckpager providers` to see the state of each."
         )
 
     def _announce_retry(errors: str) -> None:
@@ -137,14 +137,14 @@ def load_assessment(path: Path) -> Assessment:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except OSError as exc:
-        raise PitchlensError(f"Could not read {path}: {exc}") from exc
+        raise DeckpagerError(f"Could not read {path}: {exc}") from exc
     except json.JSONDecodeError as exc:
-        raise PitchlensError(f"{path.name} is not valid JSON: {exc}") from exc
+        raise DeckpagerError(f"{path.name} is not valid JSON: {exc}") from exc
     try:
         return Assessment.model_validate(payload)
     except ValidationError as exc:
         raise SchemaValidationError(
-            f"{path.name} is not a valid pitchlens assessment:\n{exc}"
+            f"{path.name} is not a valid deckpager assessment:\n{exc}"
         ) from exc
 
 
@@ -156,8 +156,8 @@ def render_assessment(
     console: Console | None = None,
 ) -> list[Path]:
     """Render the one-pager, fitting it to a single page or failing loudly."""
-    from pitchlens.render.fit import fit_to_one_page
-    from pitchlens.render.onepager import OnePagerRenderer
+    from deckpager.render.fit import fit_to_one_page
+    from deckpager.render.onepager import OnePagerRenderer
 
     say = console.print if console else (lambda *_a, **_k: None)
     size = cast(Paper, check_paper(paper))
@@ -216,7 +216,7 @@ def run_pipeline(
     console: Console,
     json_out: Path | None = None,
 ) -> None:
-    """`pitchlens analyze` — ingest, analyze, and render in one pass."""
+    """`deckpager analyze` — ingest, analyze, and render in one pass."""
     check_paper(paper)  # validate before paying for inference
     settings = load_settings(provider=provider, model=model, no_images=no_images or None)
     assessment = analyze_deck(deck_path=deck, context=context, settings=settings, console=console)
@@ -239,7 +239,7 @@ def run_analyze(
     no_images: bool,
     console: Console,
 ) -> None:
-    """`pitchlens analyze` — write the assessment JSON and stop."""
+    """`deckpager analyze` — write the assessment JSON and stop."""
     settings = load_settings(provider=provider, model=model, no_images=no_images or None)
     assessment = analyze_deck(deck_path=deck, context=context, settings=settings, console=console)
     json_out.parent.mkdir(parents=True, exist_ok=True)
@@ -254,7 +254,7 @@ def run_render(
     paper: str,
     console: Console,
 ) -> None:
-    """`pitchlens render` — turn an existing assessment JSON into the one-pager."""
+    """`deckpager render` — turn an existing assessment JSON into the one-pager."""
     check_paper(paper)
     parsed = load_assessment(assessment)
     stem = out_stem or default_stem(parsed, assessment.resolve().parent)

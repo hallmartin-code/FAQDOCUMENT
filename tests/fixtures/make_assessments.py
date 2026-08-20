@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from pitchlens.analysis.schema import RISK_ORDER, SCORECARD_ORDER, Assessment
+from deckpager.analysis.schema import RISK_ORDER, SCORECARD_ORDER, Assessment
 
 HERE = Path(__file__).parent
 FROZEN = datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC)

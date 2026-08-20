@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from pitchlens.errors import SchemaValidationError
-from pitchlens.llm.base import LLMProvider, ProviderStatus, Usage
+from deckpager.errors import SchemaValidationError
+from deckpager.llm.base import LLMProvider, ProviderStatus, Usage
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -34,7 +34,7 @@ class FakeProvider(LLMProvider):
 
     name = "fake"
 
-    def __init__(self, fixture: Path | BaseModel | dict | None = None) -> None:
+    def __init__(self, fixture: Path | BaseModel | dict[str, Any] | None = None) -> None:
         self._fixture = fixture if fixture is not None else DEFAULT_FIXTURE
         self.calls: list[tuple[str, str, int]] = []
 
@@ -65,7 +65,7 @@ class FakeProvider(LLMProvider):
         # plausible-looking fake number would corrupt any cost reporting built on Usage.
         return parsed, Usage(input_tokens=0, output_tokens=0, cost_usd=0.0)
 
-    def _payload(self) -> dict:
+    def _payload(self) -> dict[str, Any]:
         """The recorded payload, with any pipeline-owned keys stripped."""
         if isinstance(self._fixture, BaseModel):
             payload = self._fixture.model_dump(mode="json")

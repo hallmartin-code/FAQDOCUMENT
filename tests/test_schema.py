@@ -9,9 +9,9 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from pitchlens.analysis import prompts
-from pitchlens.analysis.prompts import OUTPUT_CONTRACT, TOOL_NAME
-from pitchlens.analysis.schema import (
+from deckpager.analysis import prompts
+from deckpager.analysis.prompts import OUTPUT_CONTRACT, TOOL_NAME
+from deckpager.analysis.schema import (
     RISK_ORDER,
     SCORECARD_ORDER,
     Assessment,
@@ -20,8 +20,8 @@ from pitchlens.analysis.schema import (
     RunMeta,
     assessment_tool_schema,
 )
-from pitchlens.errors import ConfigError
-from pitchlens.paths import read_prompt, require_sections
+from deckpager.errors import ConfigError
+from deckpager.paths import read_prompt, require_sections
 
 
 def _evidence(**overrides: Any) -> dict[str, Any]:

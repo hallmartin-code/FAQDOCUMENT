@@ -5,7 +5,7 @@ Values resolve highest-precedence first: CLI override -> environment -> .env ->
 hard-coded at a call site; they always come from here.
 
 `config/default.toml` is nested for readability while `Settings` stays flat, so an
-environment override is always just `PITCHLENS_<FIELD>`. `_TOML_KEYS` is the explicit
+environment override is always just `DECKPAGER_<FIELD>`. `_TOML_KEYS` is the explicit
 bridge between the two, which also means a mistyped key in the TOML is reported rather
 than silently ignored.
 """
@@ -24,8 +24,8 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-from pitchlens.errors import ConfigError
-from pitchlens.paths import config_dir
+from deckpager.errors import ConfigError
+from deckpager.paths import config_dir
 
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
 ProviderName = Literal["anthropic", "openai", "ollama", "fake"]
@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     """Configuration bound from the environment, `.env`, and `config/default.toml`."""
 
     model_config = SettingsConfigDict(
-        env_prefix="PITCHLENS_",
+        env_prefix="DECKPAGER_",
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
@@ -114,7 +114,7 @@ class Settings(BaseSettings):
     )
     no_images: bool = Field(default=False, description="Skip slide rasterization.")
 
-    # Read from the un-prefixed vendor variables, not PITCHLENS_ANTHROPIC_API_KEY, so the
+    # Read from the un-prefixed vendor variables, not DECKPAGER_ANTHROPIC_API_KEY, so the
     # tool picks up the same keys the vendor SDKs and other tooling already use.
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
@@ -175,7 +175,7 @@ def load_settings(
             raise ConfigError(
                 f"Unknown provider {provider!r}.\n"
                 f"Choose one of: {valid}.\n"
-                f"Run `pitchlens providers` to see which are configured on this machine."
+                f"Run `deckpager providers` to see which are configured on this machine."
             )
         overrides["provider"] = provider
     if model is not None:
@@ -199,7 +199,7 @@ def load_weights() -> dict[str, float]:
     Returns the ten input-category weights. "Overall Investability" is the computed
     output and carries no weight of its own.
     """
-    from pitchlens.analysis.schema import SCORECARD_ORDER
+    from deckpager.analysis.schema import SCORECARD_ORDER
 
     path = config_dir() / "weights.toml"
     expected = set(SCORECARD_ORDER) - {"Overall Investability"}
@@ -210,7 +210,7 @@ def load_weights() -> dict[str, float]:
     except OSError as exc:
         raise ConfigError(
             f"Could not read {path}: {exc}\n"
-            f"It ships with pitchlens; restore it from version control if it was moved."
+            f"It ships with deckpager; restore it from version control if it was moved."
         ) from exc
 
     table = data.get("weights")

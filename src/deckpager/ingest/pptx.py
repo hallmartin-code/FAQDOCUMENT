@@ -17,9 +17,9 @@ import pymupdf  # PyMuPDF; the legacy `fitz` alias is deprecated as of 1.28
 from pptx import Presentation
 from pptx.shapes.base import BaseShape
 
-from pitchlens.errors import IngestError
-from pitchlens.ingest.models import Deck, Slide, SlideAsset, normalize_text
-from pitchlens.ingest.pdf import first_line_title, render_page_png
+from deckpager.errors import IngestError
+from deckpager.ingest.models import Deck, Slide, SlideAsset, normalize_text
+from deckpager.ingest.pdf import first_line_title, render_page_png
 
 #: Seconds to wait for LibreOffice before giving up and degrading to text-only.
 SOFFICE_TIMEOUT_S = 180
@@ -60,7 +60,7 @@ def find_soffice() -> str | None:
 
 def _rasterize_via_libreoffice(path: Path, soffice: str) -> list[bytes]:
     """Convert the PPTX to PDF with LibreOffice, then rasterize each page to PNG."""
-    with tempfile.TemporaryDirectory(prefix="pitchlens-pptx-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="deckpager-pptx-") as tmp:
         tmp_dir = Path(tmp)
         result = subprocess.run(  # noqa: S603 - soffice path resolved above, args are fixed
             [soffice, "--headless", "--convert-to", "pdf", "--outdir", str(tmp_dir), str(path)],

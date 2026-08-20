@@ -1,4 +1,4 @@
-"""pitchlens — investment-grade pitch deck due diligence engine."""
+"""deckpager — investment-grade pitch deck due diligence engine."""
 
 from __future__ import annotations
 

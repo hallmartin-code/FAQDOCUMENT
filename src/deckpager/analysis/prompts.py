@@ -19,7 +19,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from pitchlens.analysis.schema import (
+from deckpager.analysis.schema import (
     RISK_ORDER,
     SCORECARD_ORDER,
     AssessmentDraft,
@@ -31,8 +31,8 @@ from pitchlens.analysis.schema import (
     Score,
     SectionAssessment,
 )
-from pitchlens.ingest.models import Deck
-from pitchlens.paths import require_sections
+from deckpager.ingest.models import Deck
+from deckpager.paths import require_sections
 
 TOOL_NAME = "submit_assessment"
 
@@ -42,7 +42,7 @@ MAX_REPAIRS = 2
 
 def system_prompt() -> str:
     """The venture-partner persona, verbatim from `prompts/analyst_system.md`."""
-    from pitchlens.paths import read_prompt
+    from deckpager.paths import read_prompt
 
     return read_prompt("analyst_system.md")
 
@@ -110,7 +110,7 @@ SCORECARD — exactly these eleven entries, in this order, no more and no fewer:
   Score each 1-10, or `null` where the deck gives no basis for the category. A null is a
   finding: name the gap in `data_gaps`. Do not guess a score to avoid leaving one empty.
   `overall_investability` is your own judgment. It is NOT averaged from the rows above and
-  it does NOT have to match the "Overall Investability" row — pitchlens computes a weighted
+  it does NOT have to match the "Overall Investability" row — deckpager computes a weighted
   score separately and records any disagreement rather than rejecting it.
 
 RISKS — you must rate at least these categories, using these exact names:

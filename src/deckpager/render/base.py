@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from pitchlens.analysis.schema import Assessment
+from deckpager.analysis.schema import Assessment
 
 Paper = Literal["letter", "a4"]
 

@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from pitchlens.analysis.client import FakeAnalyzer
-from pitchlens.analysis.grounding import OVERLAP_THRESHOLD, ground, overlap_ratio
-from pitchlens.analysis.schema import Assessment, AssessmentDraft
-from pitchlens.config import Settings
-from pitchlens.ingest.models import Deck, Slide
-from pitchlens.ingest.router import load_deck
-from pitchlens.pipeline import analyze_deck, default_stem, load_assessment, slugify
+from deckpager.analysis.client import FakeAnalyzer
+from deckpager.analysis.grounding import OVERLAP_THRESHOLD, ground, overlap_ratio
+from deckpager.analysis.schema import Assessment, AssessmentDraft
+from deckpager.config import Settings
+from deckpager.ingest.models import Deck, Slide
+from deckpager.ingest.router import load_deck
+from deckpager.pipeline import analyze_deck, default_stem, load_assessment, slugify
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SAMPLE = FIXTURES / "sample_assessment.json"
@@ -210,7 +210,7 @@ class TestPipelineOffline:
     def test_ingest_warnings_reach_meta(
         self, sample_pptx: Path, frozen_now: datetime, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr("pitchlens.ingest.pptx.find_soffice", lambda: None)
+        monkeypatch.setattr("deckpager.ingest.pptx.find_soffice", lambda: None)
         assessment = analyze_deck(
             deck_path=sample_pptx,
             context=None,
@@ -276,7 +276,7 @@ class TestLoadAssessment:
     def test_rejects_a_valid_json_that_is_not_an_assessment(self, tmp_path: Path) -> None:
         bad = tmp_path / "bad.json"
         bad.write_text('{"company_name": "X"}', encoding="utf-8")
-        with pytest.raises(Exception, match="not a valid pitchlens assessment"):
+        with pytest.raises(Exception, match="not a valid deckpager assessment"):
             load_assessment(bad)
 
     def test_both_fixtures_validate(self) -> None:

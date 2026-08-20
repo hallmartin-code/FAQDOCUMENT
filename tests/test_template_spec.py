@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from pitchlens.analysis.schema import RISK_ORDER, SCORECARD_ORDER
-from pitchlens.config import load_weights
+from deckpager.analysis.schema import RISK_ORDER, SCORECARD_ORDER
+from deckpager.config import load_weights
 
 TEMPLATE = Path(__file__).resolve().parents[1] / "templates" / "onepager.md"
 

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pitchlens.errors import IngestError, UnsupportedFormatError
-from pitchlens.ingest.models import Deck
-from pitchlens.ingest.pdf import load_pdf
-from pitchlens.ingest.pptx import load_pptx
+from deckpager.errors import IngestError, UnsupportedFormatError
+from deckpager.ingest.models import Deck
+from deckpager.ingest.pdf import load_pdf
+from deckpager.ingest.pptx import load_pptx
 
 #: File types the ingest layer accepts. Exported so the CLI, the web upload gate, and the
 #: error messages below all state the same set — three hardcoded copies would drift.

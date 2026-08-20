@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from pitchlens import paths
-from pitchlens.analysis.schema import SCORECARD_ORDER
-from pitchlens.config import Settings, _flatten_toml, load_settings, load_weights
-from pitchlens.errors import ConfigError
+from deckpager import paths
+from deckpager.analysis.schema import SCORECARD_ORDER
+from deckpager.config import Settings, _flatten_toml, load_settings, load_weights
+from deckpager.errors import ConfigError
 
 SCORED = [name for name in SCORECARD_ORDER if name != "Overall Investability"]
 
@@ -21,11 +21,11 @@ def isolated_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator
     """Run each test against a known configuration, not the developer's own.
 
     Both `paths` and `load_weights` memoize, so the caches are cleared on the way in and
-    again on the way out — otherwise a test that redirects PITCHLENS_CONFIG_DIR would
+    again on the way out — otherwise a test that redirects DECKPAGER_CONFIG_DIR would
     poison every test that follows it.
     """
     for name in list(os.environ):
-        if name.startswith("PITCHLENS_"):
+        if name.startswith("DECKPAGER_"):
             monkeypatch.delenv(name, raising=False)
     for name in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST"):
         monkeypatch.delenv(name, raising=False)
@@ -44,7 +44,7 @@ def _redirect_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, weights: d
     """Point the config directory at a scratch weights.toml."""
     body = "\n".join(f'"{name}" = {value}' for name, value in weights.items())
     (tmp_path / "weights.toml").write_text(f"[weights]\n{body}\n", encoding="utf-8")
-    monkeypatch.setenv("PITCHLENS_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("DECKPAGER_CONFIG_DIR", str(tmp_path))
     paths.clear_caches()
     load_weights.cache_clear()
 
@@ -59,19 +59,19 @@ class TestPrecedence:
         assert settings.max_slides == 60
 
     def test_environment_beats_the_toml(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PITCHLENS_PROVIDER", "fake")
-        monkeypatch.setenv("PITCHLENS_MODEL", "some-other-model")
+        monkeypatch.setenv("DECKPAGER_PROVIDER", "fake")
+        monkeypatch.setenv("DECKPAGER_MODEL", "some-other-model")
         settings = Settings()
         assert settings.provider == "fake"
         assert settings.model == "some-other-model"
 
     def test_cli_override_beats_the_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PITCHLENS_PROVIDER", "ollama")
+        monkeypatch.setenv("DECKPAGER_PROVIDER", "ollama")
         assert load_settings(provider="fake").provider == "fake"
 
     def test_unset_overrides_do_not_clobber(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Passing one override must not reset unrelated settings to their defaults."""
-        monkeypatch.setenv("PITCHLENS_MAX_SLIDES", "12")
+        monkeypatch.setenv("DECKPAGER_MAX_SLIDES", "12")
         settings = load_settings(provider="fake")
         assert settings.provider == "fake"
         assert settings.max_slides == 12
@@ -82,7 +82,7 @@ class TestPrecedence:
         message = str(excinfo.value)
         assert "gpt5" in message
         assert "anthropic" in message and "fake" in message
-        assert "pitchlens providers" in message
+        assert "deckpager providers" in message
 
 
 class TestApiKeys:
@@ -96,7 +96,7 @@ class TestApiKeys:
     def test_key_is_read_from_the_unprefixed_vendor_variable(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Not PITCHLENS_ANTHROPIC_API_KEY — the same variable the SDKs already use."""
+        """Not DECKPAGER_ANTHROPIC_API_KEY — the same variable the SDKs already use."""
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
         assert Settings().require_api_key("anthropic") == "sk-ant-test"
 
@@ -177,11 +177,11 @@ class TestConfigDirResolution:
     def test_env_override_pointing_at_nothing_names_the_variable(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("PITCHLENS_CONFIG_DIR", str(tmp_path / "does-not-exist"))
+        monkeypatch.setenv("DECKPAGER_CONFIG_DIR", str(tmp_path / "does-not-exist"))
         paths.clear_caches()
         with pytest.raises(ConfigError) as excinfo:
             paths.config_dir()
-        assert "PITCHLENS_CONFIG_DIR" in str(excinfo.value)
+        assert "DECKPAGER_CONFIG_DIR" in str(excinfo.value)
 
     def test_repo_root_is_found_without_any_override(self) -> None:
         assert (paths.config_dir() / "default.toml").is_file()

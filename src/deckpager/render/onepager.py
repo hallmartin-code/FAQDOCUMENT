@@ -18,10 +18,10 @@ from reportlab.lib.pagesizes import A4, LETTER
 from reportlab.lib.utils import simpleSplit
 from reportlab.pdfgen.canvas import Canvas
 
-from pitchlens.analysis.schema import Assessment, Risk, Score
-from pitchlens.errors import RenderError
-from pitchlens.render import theme as t
-from pitchlens.render.base import Layout, Paper, Renderer
+from deckpager.analysis.schema import Assessment, Risk, Score
+from deckpager.errors import RenderError
+from deckpager.render import theme as t
+from deckpager.render.base import Layout, Paper, Renderer
 
 PAGE_SIZES = {"letter": LETTER, "a4": A4}
 
@@ -347,7 +347,8 @@ class OnePagerRenderer(Renderer):
         """Wrap a risk reason to the available width. Never cut mid-word."""
         reason = _first_clause(risk.rationale) if layout.short_risk_reasons else risk.rationale
         reason_width = width - (9 + 92 + 42)
-        return simpleSplit(reason, t.FONT, t.SIZE_RISK, reason_width)
+        lines: list[str] = simpleSplit(reason, t.FONT, t.SIZE_RISK, reason_width)
+        return lines
 
     def _bullets(
         self,

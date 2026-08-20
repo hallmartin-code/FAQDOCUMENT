@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from pitchlens.errors import IngestError, UnsupportedFormatError
-from pitchlens.ingest.models import Deck, Slide, SlideAsset, normalize_text
-from pitchlens.ingest.pdf import load_pdf
-from pitchlens.ingest.pptx import find_soffice, load_pptx
-from pitchlens.ingest.router import apply_caps, load_deck
+from deckpager.errors import IngestError, UnsupportedFormatError
+from deckpager.ingest.models import Deck, Slide, SlideAsset, normalize_text
+from deckpager.ingest.pdf import load_pdf
+from deckpager.ingest.pptx import find_soffice, load_pptx
+from deckpager.ingest.router import apply_caps, load_deck
 
 
 def _fake_asset(kilobytes: int) -> SlideAsset:
@@ -51,7 +51,7 @@ class TestPdfPath:
     def test_falls_back_to_rasters_when_over_the_native_limits(
         self, sample_pdf: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr("pitchlens.ingest.pdf.MAX_NATIVE_PDF_PAGES", 2)
+        monkeypatch.setattr("deckpager.ingest.pdf.MAX_NATIVE_PDF_PAGES", 2)
         deck = load_pdf(sample_pdf, want_images=True)
         assert deck.raw_pdf_b64 is None
         assert all(s.asset is not None for s in deck.slides)
@@ -61,7 +61,7 @@ class TestPdfPath:
     def test_fallback_respects_no_images(
         self, sample_pdf: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr("pitchlens.ingest.pdf.MAX_NATIVE_PDF_PAGES", 2)
+        monkeypatch.setattr("deckpager.ingest.pdf.MAX_NATIVE_PDF_PAGES", 2)
         deck = load_pdf(sample_pdf, want_images=False)
         assert deck.raw_pdf_b64 is None
         assert all(s.asset is None for s in deck.slides)
@@ -95,7 +95,7 @@ class TestPptxPath:
     def test_warns_visibly_when_libreoffice_is_missing(
         self, sample_pptx: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr("pitchlens.ingest.pptx.find_soffice", lambda: None)
+        monkeypatch.setattr("deckpager.ingest.pptx.find_soffice", lambda: None)
         deck = load_pptx(sample_pptx, want_images=True)
         assert any("LibreOffice" in w for w in deck.warnings)
         assert all(s.asset is None for s in deck.slides)
@@ -106,7 +106,7 @@ class TestPptxPath:
         def _boom() -> str:
             raise AssertionError("soffice must not be probed when want_images is False")
 
-        monkeypatch.setattr("pitchlens.ingest.pptx.find_soffice", _boom)
+        monkeypatch.setattr("deckpager.ingest.pptx.find_soffice", _boom)
         deck = load_pptx(sample_pptx, want_images=False)
         assert deck.warnings == []
 

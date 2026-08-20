@@ -1,6 +1,6 @@
 """The provider contract.
 
-Every model call in pitchlens goes through `LLMProvider`. The interface is deliberately
+Every model call in deckpager goes through `LLMProvider`. The interface is deliberately
 narrow — one method that takes a prompt and a Pydantic model and returns an instance of
 that model — so that swapping Anthropic for Ollama changes nothing above this layer.
 
@@ -61,7 +61,7 @@ class Usage:
 
 @dataclass(frozen=True)
 class ProviderStatus:
-    """What `pitchlens providers` prints for one backend."""
+    """What `deckpager providers` prints for one backend."""
 
     name: str
     ready: bool

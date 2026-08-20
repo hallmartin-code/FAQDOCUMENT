@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pymupdf  # PyMuPDF; the legacy `fitz` alias is deprecated as of 1.28
 
-from pitchlens.errors import IngestError
-from pitchlens.ingest.models import Deck, Slide, SlideAsset, normalize_text
+from deckpager.errors import IngestError
+from deckpager.ingest.models import Deck, Slide, SlideAsset, normalize_text
 
 #: Rasterization density for the image fallback path.
 RASTER_DPI = 150

@@ -6,17 +6,17 @@ import os
 
 import pytest
 
-from pitchlens.config import Settings, load_settings
-from pitchlens.errors import ConfigError
-from pitchlens.llm.base import Usage
-from pitchlens.llm.registry import KNOWN_PROVIDERS, describe, describe_all, get_provider
+from deckpager.config import Settings, load_settings
+from deckpager.errors import ConfigError
+from deckpager.llm.base import Usage
+from deckpager.llm.registry import KNOWN_PROVIDERS, describe, describe_all, get_provider
 
 
 @pytest.fixture(autouse=True)
 def isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """Neither the developer's keys nor a local Ollama should decide these assertions."""
     for name in list(os.environ):
-        if name.startswith("PITCHLENS_"):
+        if name.startswith("DECKPAGER_"):
             monkeypatch.delenv(name, raising=False)
     for name in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OLLAMA_HOST"):
         monkeypatch.delenv(name, raising=False)
@@ -50,7 +50,7 @@ class TestDescribe:
         assert describe("anthropic", Settings()).ready
 
     def test_selected_provider_is_marked(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PITCHLENS_PROVIDER", "fake")
+        monkeypatch.setenv("DECKPAGER_PROVIDER", "fake")
         assert "selected" in describe("fake", Settings()).notes
         assert "selected" not in describe("anthropic", Settings()).notes
 

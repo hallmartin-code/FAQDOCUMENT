@@ -16,16 +16,16 @@ from typing import Any, Protocol
 import anthropic
 from pydantic import ValidationError
 
-from pitchlens.analysis.prompts import (
+from deckpager.analysis.prompts import (
     TOOL_NAME,
     build_retry_blocks,
     build_system_blocks,
     build_user_blocks,
 )
-from pitchlens.analysis.schema import AssessmentDraft, assessment_tool_schema
-from pitchlens.config import Settings
-from pitchlens.errors import AnalysisError, SchemaValidationError
-from pitchlens.ingest.models import Deck
+from deckpager.analysis.schema import AssessmentDraft, assessment_tool_schema
+from deckpager.config import Settings
+from deckpager.errors import AnalysisError, SchemaValidationError
+from deckpager.ingest.models import Deck
 
 TOOL_DESCRIPTION = (
     "Submit the completed investment-grade due diligence assessment. This is the only way "
@@ -214,7 +214,7 @@ class AnthropicAnalyzer:
             if error is not None and truncated:
                 error = (
                     f"{error} The response hit the {self.settings.max_tokens}-token output "
-                    f"limit — be more concise, or the operator should raise PITCHLENS_MAX_TOKENS."
+                    f"limit — be more concise, or the operator should raise DECKPAGER_MAX_TOKENS."
                 )
             return _Attempt(
                 tool_use_id=block.id, content=list(response.content), payload=payload, error=error
@@ -223,7 +223,7 @@ class AnthropicAnalyzer:
         if truncated:
             raise AnalysisError(
                 f"The model hit the {self.settings.max_tokens}-token output limit before "
-                f"calling `{TOOL_NAME}`. Raise PITCHLENS_MAX_TOKENS and retry."
+                f"calling `{TOOL_NAME}`. Raise DECKPAGER_MAX_TOKENS and retry."
             )
         kinds = ", ".join(block.type for block in response.content) or "none"
         raise AnalysisError(

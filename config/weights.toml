@@ -1,7 +1,7 @@
 # Scorecard weighting — analyst-editable.
 #
 # Overall Investability is COMPUTED from these weights. It is not taken on faith from the
-# model: the model states its own overall, pitchlens computes this weighted one, and if
+# model: the model states its own overall, deckpager computes this weighted one, and if
 # the two differ by more than 1.0 the run records a `score_divergence` warning. That
 # disagreement is a signal worth reading, which is why both numbers survive into the JSON.
 #

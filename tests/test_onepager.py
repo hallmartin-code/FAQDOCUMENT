@@ -15,11 +15,11 @@ from pathlib import Path
 import pytest
 from pypdf import PdfReader
 
-from pitchlens.analysis.schema import SCORECARD_ORDER, Assessment, AssessmentDraft, RunMeta
-from pitchlens.errors import OnePagerOverflowError
-from pitchlens.render.base import Layout
-from pitchlens.render.fit import fit_to_one_page
-from pitchlens.render.onepager import OnePagerRenderer, _first_clause, _truncate_words
+from deckpager.analysis.schema import SCORECARD_ORDER, Assessment, AssessmentDraft, RunMeta
+from deckpager.errors import OnePagerOverflowError
+from deckpager.render.base import Layout
+from deckpager.render.fit import fit_to_one_page
+from deckpager.render.onepager import OnePagerRenderer, _first_clause, _truncate_words
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

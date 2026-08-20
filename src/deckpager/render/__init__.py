@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pitchlens.render.base import Layout, Paper, Renderer
-from pitchlens.render.onepager import OnePagerRenderer
+from deckpager.render.base import Layout, Paper, Renderer
+from deckpager.render.onepager import OnePagerRenderer
 
 __all__ = ["Layout", "OnePagerRenderer", "Paper", "Renderer"]

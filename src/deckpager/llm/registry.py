@@ -6,7 +6,7 @@ Two entry points, deliberately separate:
 should stop the run before a deck is parsed.
 
 `describe` reports what each backend *would* do without constructing it, so
-`pitchlens providers` can list a backend that is not configured instead of crashing on
+`deckpager providers` can list a backend that is not configured instead of crashing on
 the first one that is not. It also keeps the heavy vendor SDKs out of a `--help`.
 """
 
@@ -17,14 +17,15 @@ import json
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel
 
-from pitchlens.config import Settings
-from pitchlens.errors import ConfigError
-from pitchlens.llm.base import LLMProvider, ProviderStatus
+from deckpager.config import Settings
+from deckpager.errors import ConfigError
+from deckpager.llm.base import LLMProvider, ProviderStatus
 
-#: Registry order — this is the order `pitchlens providers` prints.
+#: Registry order — this is the order `deckpager providers` prints.
 KNOWN_PROVIDERS: tuple[str, ...] = ("anthropic", "openai", "ollama", "fake")
 
 #: Provider -> the distribution that must be importable for it to run.
@@ -140,7 +141,7 @@ def describe_all(settings: Settings) -> list[ProviderStatus]:
     return [describe(name, settings) for name in KNOWN_PROVIDERS]
 
 
-def get_provider(settings: Settings, fixture: Path | BaseModel | dict | None = None) -> LLMProvider:
+def get_provider(settings: Settings, fixture: Path | BaseModel | dict[str, Any] | None = None) -> LLMProvider:
     """Construct the configured provider, or explain why it cannot be built."""
     name = settings.provider
     if name not in KNOWN_PROVIDERS:
@@ -152,14 +153,17 @@ def get_provider(settings: Settings, fixture: Path | BaseModel | dict | None = N
         available = ", ".join(sorted(_WIRED)) or "none yet"
         raise ConfigError(
             f"The {name} provider adapter {_PENDING.get(name, 'is not implemented')}.\n"
-            f"Wired today: {available}. Run `pitchlens providers` to see the state of each."
+            f"Wired today: {available}. Run `deckpager providers` to see the state of each."
         )
 
     if name == "fake":
-        from pitchlens.llm.fake import FakeProvider
+        from deckpager.llm.fake import FakeProvider
 
         return FakeProvider(fixture)
 
-    from pitchlens.llm.anthropic import AnthropicProvider
+    from deckpager.llm.anthropic import AnthropicProvider
 
-    return AnthropicProvider(settings)
+    # Annotated rather than returned directly: the adapter module is untyped to mypy,
+    # and an implicit Any escaping a declared return type is what --strict forbids.
+    provider: LLMProvider = AnthropicProvider(settings)
+    return provider

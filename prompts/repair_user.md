@@ -1,19 +1,19 @@
 <!--
 The repair turn, sent when a tool payload fails schema validation.
 
-Sections are delimited by `<!-- pitchlens:section NAME -->`. Placeholders use ${name}
+Sections are delimited by `<!-- deckpager:section NAME -->`. Placeholders use ${name}
 and are substituted with str.Template; a literal dollar sign must be written $$.
 
   tool_result  the errored tool_result block answering the model's tool_use. ${errors}
   instruction  the text turn that follows it. ${attempt} ${max_attempts}
 -->
 
-<!-- pitchlens:section tool_result -->
+<!-- deckpager:section tool_result -->
 Schema validation failed:
 
 ${errors}
 
-<!-- pitchlens:section instruction -->
+<!-- deckpager:section instruction -->
 Your tool call did not validate against the required schema. The errors above are the exact validator messages, each naming the field it came from.
 
 Fix only what the errors require and call the tool again with the corrected assessment. Keep the rest of your analysis exactly as it was — this is a repair, not a rewrite, and changing untouched fields risks introducing new violations.

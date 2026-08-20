@@ -14,8 +14,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from pitchlens.errors import OnePagerOverflowError
-from pitchlens.render.base import Layout
+from deckpager.errors import OnePagerOverflowError
+from deckpager.render.base import Layout
 
 #: The reduction ladder, in the order it is applied. Each entry is a label and a function
 #: that returns the next layout to try, or None when that rung has nothing left to give.

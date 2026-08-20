@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import re
 
-from pitchlens.analysis.schema import AssessmentDraft, Evidence
-from pitchlens.ingest.models import Deck
+from deckpager.analysis.schema import AssessmentDraft, Evidence
+from deckpager.ingest.models import Deck
 
 #: Fraction of the quote's tokens that must appear on the cited slide.
 #: Below 1.0 to tolerate ligatures, hyphenation, and column-order noise from extraction.

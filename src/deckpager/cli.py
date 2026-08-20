@@ -1,4 +1,4 @@
-"""pitchlens command line interface."""
+"""deckpager command line interface."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from pitchlens import __version__
-from pitchlens.errors import PitchlensError
+from deckpager import __version__
+from deckpager.errors import DeckpagerError
 
 # Windows consoles still default to a legacy code page, which turns the em-dashes and
 # arrows in prompts, warnings, and company names into replacement characters — or raises
@@ -20,7 +20,7 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 app = typer.Typer(
-    name="pitchlens",
+    name="deckpager",
     help="Investment-grade pitch deck due diligence engine.",
     no_args_is_help=True,
     add_completion=False,
@@ -43,13 +43,13 @@ ContextOpt = Annotated[
 ]
 ModelOpt = Annotated[
     str | None,
-    typer.Option("--model", help="Override the model ID (default from PITCHLENS_MODEL)."),
+    typer.Option("--model", help="Override the model ID (default from DECKPAGER_MODEL)."),
 ]
 ProviderOpt = Annotated[
     str | None,
     typer.Option(
         "--provider",
-        help="LLM backend: anthropic, openai, ollama, or fake. Overrides PITCHLENS_PROVIDER.",
+        help="LLM backend: anthropic, openai, ollama, or fake. Overrides DECKPAGER_PROVIDER.",
     ),
 ]
 NoImagesOpt = Annotated[
@@ -58,7 +58,7 @@ NoImagesOpt = Annotated[
 ]
 
 
-def _fail(exc: PitchlensError) -> None:
+def _fail(exc: DeckpagerError) -> None:
     """Print a human-readable error and exit with the error's code."""
     err_console.print(f"[bold red]error:[/bold red] {exc}")
     raise typer.Exit(code=exc.exit_code)
@@ -79,7 +79,7 @@ def analyze(
     ] = None,
 ) -> None:
     """Analyze a deck: write the one-pager PDF and the analysis JSON."""
-    from pitchlens.pipeline import run_pipeline
+    from deckpager.pipeline import run_pipeline
 
     try:
         run_pipeline(
@@ -93,7 +93,7 @@ def analyze(
             json_out=json_out,
             console=console,
         )
-    except PitchlensError as exc:
+    except DeckpagerError as exc:
         _fail(exc)
 
 
@@ -104,11 +104,11 @@ def render(
     paper: PaperOpt = "letter",
 ) -> None:
     """Render the one-pager from an existing assessment JSON. No model call."""
-    from pitchlens.pipeline import run_render
+    from deckpager.pipeline import run_render
 
     try:
         run_render(assessment=assessment, out_stem=out, paper=paper, console=console)
-    except PitchlensError as exc:
+    except DeckpagerError as exc:
         _fail(exc)
 
 
@@ -117,13 +117,13 @@ def providers(model: ModelOpt = None) -> None:
     """List the configured LLM backends and check whether each is usable."""
     from rich.table import Table
 
-    from pitchlens.config import load_settings
-    from pitchlens.llm.registry import describe_all
+    from deckpager.config import load_settings
+    from deckpager.llm.registry import describe_all
 
     try:
         settings = load_settings(model=model)
         statuses = describe_all(settings)
-    except PitchlensError as exc:
+    except DeckpagerError as exc:
         _fail(exc)
         return
 
@@ -141,15 +141,63 @@ def providers(model: ModelOpt = None) -> None:
         table.add_row(mark, name, status.model or "-", detail)
     console.print(table)
     console.print(
-        f"\n[dim]Selected: {settings.provider} (--provider > PITCHLENS_PROVIDER > "
+        f"\n[dim]Selected: {settings.provider} (--provider > DECKPAGER_PROVIDER > "
         f"config/default.toml). Vision-capable backends attach slide images.[/dim]"
     )
 
 
 @app.command()
+def check() -> None:
+    """Verify this machine can run deckpager: API key, data files, engines, LibreOffice."""
+    from rich.markup import escape
+    from rich.table import Table
+
+    from deckpager.config import load_settings
+    from deckpager.errors import EXIT_CONFIG
+    from deckpager.preflight import Status, run_checks
+
+    try:
+        settings = load_settings()
+    except DeckpagerError as exc:
+        _fail(exc)
+        return
+
+    results = run_checks(settings)
+
+    marks = {
+        Status.OK: "[green]OK[/green]",
+        Status.WARN: "[yellow]--[/yellow]",
+        Status.FAIL: "[red]XX[/red]",
+    }
+    table = Table(box=None, pad_edge=False, header_style="bold")
+    table.add_column("")
+    table.add_column("check")
+    table.add_column("detail")
+    for result in results:
+        table.add_row(marks[result.status], result.name, escape(result.detail))
+    console.print(table)
+
+    # Fixes print below the table rather than in it: they are shell commands, and a
+    # wrapped command inside a table cell is a command you cannot copy.
+    for result in (r for r in results if r.fix):
+        console.print(f"[dim]{result.name}:[/dim] {escape(result.fix or '')}")
+
+    blocking = [r for r in results if r.blocking]
+    if blocking:
+        err_console.print()
+        err_console.print(
+            f"[bold red]{len(blocking)} blocking problem(s).[/bold red] "
+            f"deckpager cannot run until they are fixed."
+        )
+        raise typer.Exit(code=EXIT_CONFIG)
+    console.print()
+    console.print("[green]Ready.[/green]")
+
+
+@app.command()
 def version() -> None:
-    """Print the pitchlens version."""
-    console.print(f"pitchlens {__version__}")
+    """Print the deckpager version."""
+    console.print(f"deckpager {__version__}")
 
 
 if __name__ == "__main__":  # pragma: no cover
