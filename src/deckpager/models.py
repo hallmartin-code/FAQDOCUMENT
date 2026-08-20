@@ -301,7 +301,11 @@ class Provenance(BaseModel):
     model: str
     input_tokens: int = pydantic.Field(default=0, ge=0)
     output_tokens: int = pydantic.Field(default=0, ge=0)
-    estimated_cost_usd: float = pydantic.Field(default=0.0, ge=0.0)
+    estimated_cost_usd: float | None = pydantic.Field(
+        default=None,
+        ge=0.0,
+        description="None when this model is not in the local price table.",
+    )
     cached: bool = pydantic.Field(
         default=False, description="Whether this came from the extraction cache."
     )

@@ -61,6 +61,13 @@ DryRunOpt = Annotated[
         help="Parse the deck and print what was read. No model call, no cost.",
     ),
 ]
+NoCacheOpt = Annotated[
+    bool,
+    typer.Option(
+        "--no-cache",
+        help="Ignore the extraction cache and pay for a fresh call.",
+    ),
+]
 NoImagesOpt = Annotated[
     bool,
     typer.Option("--no-images", help="Skip slide rasterization; analyze text only."),
@@ -72,6 +79,11 @@ def _fail(exc: DeckpagerError) -> None:
     err_console.print(f"[bold red]error:[/bold red] {exc}")
     raise typer.Exit(code=exc.exit_code)
 
+
+def _announce_schema_retry(errors: str) -> None:
+    """Say when the model failed validation and is being given one correction turn."""
+    err_console.print("[yellow]schema validation failed; retrying once with the errors fed back:[/yellow]")
+    err_console.print(f"[dim]{escape(errors)}[/dim]")
 
 def _print_deck_summary(deck: Deck) -> None:
     """Print what ingestion actually read, one row per slide.
@@ -142,7 +154,8 @@ def render(
 ) -> None:
     """Turn a deck into the one-pager PDF and its analysis JSON."""
     from deckpager.config import load_settings
-    from deckpager.pipeline import ingest_deck, run_pipeline
+    from deckpager.ingest import ingest_deck
+    from deckpager.pipeline import run_pipeline
 
     if dry_run:
         try:
@@ -167,6 +180,63 @@ def render(
     except DeckpagerError as exc:
         _fail(exc)
 
+
+@app.command()
+def extract(
+    deck: Annotated[
+        Path, typer.Argument(help="Path to the pitch deck (.pdf, .pptx, or .ppt).")
+    ],
+    json_out: Annotated[
+        Path | None,
+        typer.Option("--json", "-o", help="Where to write the one-pager JSON."),
+    ] = None,
+    model: ModelOpt = None,
+    no_images: NoImagesOpt = False,
+    no_cache: NoCacheOpt = False,
+) -> None:
+    """Extract a deck to one-pager JSON. No PDF.
+
+    Transitional: this is the Phase 3 deliverable, so the extraction can be reviewed
+    before a renderer exists to hide it. Phase 5 folds it into `render`.
+    """
+    import time
+
+    from deckpager.config import load_settings
+    from deckpager.extract.pipeline import cost_line, extract_one_pager
+
+    started = time.monotonic()
+    try:
+        settings = load_settings(model=model, no_images=no_images)
+        one_pager = extract_one_pager(
+            deck,
+            settings=settings,
+            use_cache=not no_cache,
+            on_stage=lambda name: console.print(f"[dim]{name}[/dim] {deck.name}"),
+            on_retry=_announce_schema_retry,
+        )
+    except DeckpagerError as exc:
+        _fail(exc)
+        return
+
+    destination = json_out or deck.with_name(f"{deck.stem}-onepager.json")
+    destination.write_text(
+        one_pager.model_dump_json(indent=2) + "\n", encoding="utf-8"
+    )
+
+    for warning in one_pager.provenance.ingest_warnings:
+        err_console.print(f"[yellow]warning:[/yellow] {escape(warning)}")
+
+    weak = one_pager.low_confidence_fields()
+    if weak:
+        console.print(
+            f"[yellow]{len(weak)} field(s) below the confidence threshold:[/yellow] "
+            f"{escape(', '.join(sorted(weak)))}"
+        )
+    if not one_pager.is_pitch_deck:
+        err_console.print("[yellow]This document does not read as a pitch deck.[/yellow]")
+
+    console.print(f"[green]wrote[/green] {destination}")
+    console.print(f"[dim]{cost_line(one_pager, time.monotonic() - started)}[/dim]")
 
 @app.command()
 def redraw(
