@@ -1,0 +1,42 @@
+# pitchlens defaults.
+#
+# Lowest-precedence layer. Anything here is overridden by a PITCHLENS_* environment
+# variable, by .env, and by a command-line flag, in that order — so this file is the
+# house default, not a lock.
+#
+# Every key below is read by src/pitchlens/config.py. Keys for features that do not exist
+# yet are deliberately absent; they arrive with the milestone that consumes them.
+
+[provider]
+# Which LLM backend to use: anthropic, openai, ollama, or fake.
+# `fake` replays a recorded fixture and never touches the network — it is what the test
+# suite and offline layout work run against.
+# Override: --provider on the CLI, or PITCHLENS_PROVIDER.
+name = "anthropic"
+
+[model]
+# Model ID. Never hard-coded at a call site; it is always read from here.
+# Override: --model, or PITCHLENS_MODEL.
+name = "claude-opus-5"
+
+# Output token ceiling for one assessment. Adaptive thinking is on by default on the
+# Opus 5 family and thinking tokens count against this, so a full eleven-score assessment
+# needs the headroom — 16000 truncates mid-response on a 30-slide deck. Requests are
+# streamed, so a high ceiling costs nothing when the model does not use it.
+max_tokens = 32000
+
+# Reasoning effort: low, medium, high, xhigh, or max.
+effort = "high"
+
+[ingest]
+# Slides sent in one request. Decks longer than this are still read in full; the cap
+# governs what reaches the model.
+max_slides = 60
+
+# Total decoded size of attached slide images, in bytes. Images are shed when this is
+# exceeded; slide text is never dropped, because that would break slide-number citations.
+max_image_bytes = 5_000_000
+
+# Skip rasterizing slides entirely and analyze text only. Cheaper and faster, but blind
+# to charts, logos, and anything else the extractor cannot turn into text.
+no_images = false
