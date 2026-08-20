@@ -3,6 +3,10 @@
 Design decisions taken where the build spec was silent, plus suggestions deliberately
 not acted on. Newest phase last.
 
+Phases named "deckdd" and "pitchlens" below predate this repository: deckpager is a fork
+of pitchlens, and those entries are kept as the record of why the inherited code looks the
+way it does. They are not renamed, because renaming them would falsify the history.
+
 ---
 
 ## Phase 1 — Skeleton
@@ -282,3 +286,76 @@ watching, and stops the progress bar sitting on one stage for four minutes.
 multi-page memo, and the JSON — no DOCX anywhere. `--format pdf|docx|both` is replaced by
 `--paper letter|a4`, and `run`/`analyze` collapse into the single `analyze` command §8
 describes.
+
+---
+
+## deckpager Phase 0 — Fork and scaffold
+
+### DP1. Forked pitchlens rather than starting clean-room
+
+pitchlens already implements deck ingestion, forced-tool-use extraction, and — the part
+that is genuinely hard to get right — a one-page guarantee that measures geometric overflow
+instead of counting pages. `render/fit.py` records why that distinction matters: ReportLab
+paints past the bottom edge without ever starting a second page, so `len(reader.pages) == 1`
+is not evidence that anything fits. A clean-room build following the spec's test list would
+have written that vacuous assertion.
+
+The first commit here is the unmodified fork, so every later diff separates deckpager's own
+work from what it inherited.
+
+### DP2. Dropped the web app, the mailer, and the Railway files
+
+`app.py`, `web/`, `mailer.py`, `Procfile`, `railway.json`, and `requirements.txt` are the
+deployed-service surface of pitchlens. deckpager's spec §10 is a CLI. Carrying a FastAPI
+app and an SMTP client that nothing calls would mean maintaining — and type-checking — a
+product that does not exist. `python-docx`, `fastapi`, and `httpx` left with them; none had
+a remaining import.
+
+### DP3. Exit codes remapped to the five in spec §10
+
+pitchlens used seven codes (config 2, ingest 3, analysis 4, schema 5, render 6, overflow 7).
+The spec names five: 1 bad input, 2 extraction failed, 3 render failed, 4 config. They are
+now module constants in `errors.py` rather than literals on each class, so the mapping is
+readable in one place. `SchemaValidationError` shares the extraction code deliberately: by
+the time it escapes, the correction retry is spent, and from the shell's point of view what
+failed is the extraction.
+
+### DP4. mypy runs `--strict`, with the vendor exemption scoped to vendors
+
+Spec §3 requires it; the fork was on `strict = false`. Ten errors surfaced, all real and all
+small. Four were calls into PyMuPDF and python-pptx, which ship unannotated callables — the
+fix is `untyped_calls_exclude = ["pymupdf", "pptx"]`, which exempts calls *into* those
+packages while leaving our own code fully checked. A blanket `disallow_untyped_calls = false`
+would have exempted our code too.
+
+### DP5. `deckpager check` grades its results; only failures set the exit code
+
+Three states, not two. A missing GTK stack means the optional WeasyPrint engine is
+unavailable while the default ReportLab engine is fine; a missing LibreOffice means `.ppt`
+is unavailable while `.pdf` and `.pptx` are fine. Reporting either as a failure would train
+the user to ignore the command. Only `Status.FAIL` — no API key, no data directories, an
+interpreter below 3.11 — exits 4.
+
+The check reports that the API key is *set* and which source it came from. It never prints
+the key, and a test asserts the key does not appear in the command's output.
+
+### DP6. No Makefile
+
+Spec §13 asks for a CI-less `make test`. `make` is not installed on the target Windows
+machine and is not part of Git Bash, so a Makefile would be a file that cannot be run.
+Tests run with `pytest` (or `.venv/Scripts/python -m pytest`). Revisit if the project
+acquires a Unix or WSL development path.
+
+### DP7. The inherited `llm/` provider seam is dead code, left in place pending a decision
+
+`src/deckpager/llm/` (base, fake, registry — 364 lines) is a multi-provider abstraction that
+was never wired: `_WIRED` is an empty frozenset, so `get_provider` refuses every provider
+including `fake`, and its final branch imports `deckpager.llm.anthropic`, a module that does
+not exist. The live path is `analysis/client.py` (`Analyzer` / `AnthropicAnalyzer` /
+`FakeAnalyzer`), which is what `pipeline.py` actually uses.
+
+deckpager's spec names one LLM (§4) and a CLI without a `providers` command (§10), so the
+seam has no future here. It was left untouched in Phase 0 rather than deleted, because
+removing a subsystem plus its tests and the `provider` config field is a larger change than
+the phase was scoped for.
+
