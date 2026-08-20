@@ -256,6 +256,24 @@ class TestSending:
         assert captured[0].headers["Authorization"] == f"Bearer {SECRET}"
         assert captured[0].full_url == mailer.RESEND_ENDPOINT
 
+    def test_the_request_identifies_itself(
+        self,
+        one_pager: OnePager,
+        result: RunResult,
+        enabled: Settings,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Regression: Cloudflare 403s urllib's default agent with error 1010.
+
+        The failure is indistinguishable from a bad key or an unverified domain in the
+        response body, so it cost a live debugging round. The header stays.
+        """
+        captured = self._stub(monkeypatch)
+        send(one_pager, result, enabled)
+        # urllib normalises header names to Capitalised form.
+        assert captured[0].headers["User-agent"] == mailer.USER_AGENT
+        assert "deckpager" in captured[0].headers["User-agent"]
+
     def test_a_rejection_explains_itself_without_raising(
         self,
         one_pager: OnePager,

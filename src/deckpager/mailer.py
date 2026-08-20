@@ -33,6 +33,11 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle only matters to the type ch
 
 RESEND_ENDPOINT = "https://api.resend.com/emails"
 
+#: Resend sits behind Cloudflare, which rejects urllib's default agent string with a
+#: 403 and Cloudflare error 1010 — a bot-signature block that reads nothing like an
+#: auth or domain failure. Identifying ourselves is what makes the request pass.
+USER_AGENT = "deckpager/1.0 (+https://tencapital.group)"
+
 #: Resend caps a message at 40 MB. A one-pager is tens of kilobytes and the extraction JSON
 #: is smaller, so this only bites if someone attaches something unexpected.
 MAX_ATTACHMENT_BYTES = 35 * 1024 * 1024
@@ -243,6 +248,8 @@ def send(
         headers={
             "Authorization": f"Bearer {settings.resend_api_key}",
             "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
+            "Accept": "application/json",
         },
         method="POST",
     )
