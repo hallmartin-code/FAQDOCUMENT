@@ -345,4 +345,4 @@ is the unmodified fork, so `git log` separates inherited code from deckpager's o
 3. **Default model is `claude-opus-5`, not `claude-sonnet-4-6`** (§8). Set in
    `config/default.toml`; override with `--model` or `DECKPAGER_MODEL`.
 
-**Phase status:** Phase 0 complete. Phase 1 (ingestion) next.
+**Phase status:** Phases 0 and 1 complete. Phase 2 (models, schema, cache) next.

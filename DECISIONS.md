@@ -359,3 +359,76 @@ seam has no future here. It was left untouched in Phase 0 rather than deleted, b
 removing a subsystem plus its tests and the `provider` config field is a larger change than
 the phase was scoped for.
 
+---
+
+## deckpager Phase 1 - Ingestion
+
+### DP8. pdfplumber reads the text, PyMuPDF draws the pictures
+
+Spec 4 names both libraries, and they are genuinely better at different things.
+pdfplumber keeps reading order and recovers a table as rows; PyMuPDF rasterizes and
+reports vector path counts. The file is therefore parsed twice, which costs a few
+hundred milliseconds against a model call measured in seconds. Worth it: extract_text
+alone flattens a traction table into reading order and loses which number belonged to
+which column, and that is exactly the table a partner cares about.
+
+Flattened table rows are appended under a `[table]` marker even though they duplicate
+words already in the running text. The duplication buys structure the raw text has
+already lost.
+
+### DP9. Chart detection is exact for PPTX and a calibrated heuristic for PDF
+
+A PPTX chart is a first-class object and python-pptx says so. A PDF has no such notion,
+so the PDF path counts vector drawing operations. The threshold was measured rather than
+guessed: on a real deck in the samples folder, prose pages ran 2-6 paths and pages
+carrying a diagram or bar chart ran 11-26; the synthetic chart fixture runs 24-60.
+`CHART_DRAWING_PATHS = 15` sits in the gap with margin either side.
+
+It is a hint, not a fact. It colours the prompt and the dry-run summary; nothing depends
+on it being right, and a chart pasted in as a picture is invisible to both paths.
+
+### DP10. Image rationing exempts image-dominant slides, in both directions
+
+Spec 7 keeps images for slides 1-25 plus any image-dominant slide. Implementing the
+positional rule was straightforward; the byte budget underneath it was not. The
+inherited shed order was text-density ascending, which drops the *sparsest* slides
+first - and an image-dominant slide is by definition the sparsest thing in the deck.
+The rule as inherited would have thrown away precisely the images that carry meaning.
+
+`_shed_order` now sorts image-dominant slides last, so they are the final images given
+up rather than the first.
+
+### DP11. A slide the model cannot read is now said out loud
+
+There is one case where spec 7 cannot be satisfied: a PPTX ingested on a machine with no
+LibreOffice. Its wordless slides reach the model as an empty string with no image behind
+them. `_warn_about_blind_slides` names those slide numbers. Without it, a deck whose
+middle third is full-bleed diagrams looks to the reader like a deck that said nothing.
+
+A natively sent PDF is exempt: the whole file goes to the model, so those pages are seen.
+
+### DP12. The CLI moved to the spec 10 surface
+
+`analyze` became `render DECK_PATH`, and the old `render` (which took an analysis JSON)
+became `redraw`. Spec 10 has no `analyze`, and leaving a `render` that refused decks
+would have been the most confusing possible half-measure. `redraw` survives the rename
+because it is the zero-cost layout loop, and Phase 4 iterates on layout.
+
+`--dry-run` runs the same `ingest_deck` the paid path runs, needs no API key, and asserts
+in tests that no analyzer is ever constructed.
+
+### DP13. JPEG q80 is followed as specified, and it is not always the smaller file
+
+Spec 7 asks for 120 DPI JPEG at quality 80. Measured on the text fixture, that page
+encodes to 30 kB as JPEG against 23 kB as PNG - vector text is exactly the content PNG
+wins on, and JPEG additionally puts ringing artifacts around small type. The spec was
+followed. The alternative, encoding both and keeping the smaller, is a one-line change in
+`render_page_image` if the image budget ever becomes the binding constraint.
+
+### DP14. The .ppt success path is unverified on this machine
+
+LibreOffice is not installed here, so `load_ppt` has been exercised only through its
+failure path: the router recognizes the OLE2 header, refuses an .xls wearing the same
+header, and the missing-soffice error names the install command for the running platform.
+The conversion itself is untested. It should be run against a real .ppt before anyone
+relies on it.

@@ -30,6 +30,12 @@ def sample_pptx() -> Path:
 
 
 @pytest.fixture
+def image_heavy_pdf() -> Path:
+    """A three-page PDF of charts and diagrams with almost no text."""
+    return FIXTURES / "image_heavy_deck.pdf"
+
+
+@pytest.fixture
 def frozen_now() -> datetime:
     """The injectable run timestamp used by deterministic rendering tests."""
     return FROZEN_NOW

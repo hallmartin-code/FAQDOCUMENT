@@ -13,37 +13,19 @@ from __future__ import annotations
 
 import os
 import platform
-import shutil
 import sys
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
 
 from deckpager.config import Settings
 from deckpager.errors import ConfigError
+from deckpager.ingest.legacy_ppt import find_soffice, install_hint
 from deckpager.paths import config_dir, prompts_dir
 
 #: The interpreter floor, mirroring `requires-python` in pyproject.toml. Held in a
 #: constant rather than compared inline so it reads as the project's declared minimum,
 #: not as a version block to be linted away.
 MIN_PYTHON: tuple[int, int] = (3, 11)
-
-#: Where LibreOffice puts `soffice` when it is not on PATH. Checked in order.
-_SOFFICE_FALLBACKS: tuple[str, ...] = (
-    r"C:\Program Files\LibreOffice\program\soffice.exe",
-    r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
-    "/Applications/LibreOffice.app/Contents/MacOS/soffice",
-    "/usr/bin/soffice",
-    "/usr/local/bin/soffice",
-    "/snap/bin/libreoffice",
-)
-
-#: Per-platform install line for LibreOffice, which converts legacy .ppt files.
-_SOFFICE_INSTALL: dict[str, str] = {
-    "Windows": "winget install TheDocumentFoundation.LibreOffice",
-    "Darwin": "brew install --cask libreoffice",
-    "Linux": "sudo apt install libreoffice-impress   (or your distro's equivalent)",
-}
 
 #: Per-platform install line for the GTK libraries WeasyPrint links against.
 _GTK_INSTALL: dict[str, str] = {
@@ -79,18 +61,6 @@ class CheckResult:
     def blocking(self) -> bool:
         """Whether this result should stop the run."""
         return self.status is Status.FAIL
-
-
-def find_soffice() -> str | None:
-    """Locate the LibreOffice binary used to convert legacy .ppt decks."""
-    for name in ("soffice", "soffice.exe", "libreoffice"):
-        found = shutil.which(name)
-        if found:
-            return found
-    for candidate in _SOFFICE_FALLBACKS:
-        if Path(candidate).is_file():
-            return candidate
-    return None
 
 
 def _install_line(table: dict[str, str]) -> str:
@@ -178,7 +148,7 @@ def check_soffice() -> CheckResult:
             "libreoffice (.ppt support)",
             Status.WARN,
             "not found — .pdf and .pptx still work",
-            _install_line(_SOFFICE_INSTALL),
+            install_hint(),
         )
     return CheckResult("libreoffice (.ppt support)", Status.OK, found)
 

@@ -31,7 +31,11 @@ effort = "high"
 [ingest]
 # Slides sent in one request. Decks longer than this are still read in full; the cap
 # governs what reaches the model.
-max_slides = 60
+max_slides = 40
+
+# How many leading slides may carry a rasterized image. Image-dominant slides are
+# exempt wherever they sit in the deck.
+max_image_slides = 25
 
 # Total decoded size of attached slide images, in bytes. Images are shed when this is
 # exceeded; slide text is never dropped, because that would break slide-number citations.

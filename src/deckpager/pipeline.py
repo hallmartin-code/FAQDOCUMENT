@@ -18,6 +18,7 @@ from deckpager.analysis.grounding import ground
 from deckpager.analysis.schema import Assessment, RunMeta
 from deckpager.config import Settings, load_settings
 from deckpager.errors import ConfigError, DeckpagerError, RenderError, SchemaValidationError
+from deckpager.ingest.models import Deck
 from deckpager.ingest.router import load_deck
 from deckpager.render.base import Paper
 
@@ -47,6 +48,21 @@ def default_stem(assessment: Assessment, source_dir: Path) -> Path:
     return source_dir / slugify(assessment.company_name)
 
 
+def ingest_deck(deck_path: Path, settings: Settings) -> Deck:
+    """Read a deck and apply the request budgets. No model call, no cost.
+
+    Split out of `analyze_deck` so `--dry-run` exercises the same ingestion the paid
+    path uses. A dry run that read the deck differently would be worth nothing.
+    """
+    return load_deck(
+        deck_path,
+        want_images=not settings.no_images,
+        max_slides=settings.max_slides,
+        max_image_slides=settings.max_image_slides,
+        max_image_bytes=settings.max_image_bytes,
+    )
+
+
 def analyze_deck(
     *,
     deck_path: Path,
@@ -68,12 +84,7 @@ def analyze_deck(
 
     stage("extracting")
     say(f"[dim]ingesting[/dim] {deck_path.name}")
-    deck = load_deck(
-        deck_path,
-        want_images=not settings.no_images,
-        max_slides=settings.max_slides,
-        max_image_bytes=settings.max_image_bytes,
-    )
+    deck = ingest_deck(deck_path, settings)
     say(f"[green]OK[/green] {deck.slide_count} slides ({deck.source_format})")
     for warning in deck.warnings:
         say(f"[yellow]warning:[/yellow] {warning}")

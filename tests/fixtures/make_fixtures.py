@@ -100,8 +100,43 @@ def build_pptx(target: Path) -> None:
     presentation.save(str(target))
 
 
+def build_image_heavy_pdf(target: Path) -> None:
+    """Write a three-page deck that says almost nothing in text.
+
+    Page 1 is a bar chart with a two-character axis label, page 2 a scatter of circles
+    with no text at all, page 3 a dense grid. Every page falls under the 20-character
+    image-dominant threshold and over the vector-path count that reads as a chart, which
+    is exactly the deck the ingest layer has to notice and send as pictures.
+    """
+    page = landscape(letter)
+    pdf = canvas.Canvas(str(target), pagesize=page)
+    width, height = page
+
+    # Page 1 — bar chart.
+    for i in range(24):
+        bar_height = 40 + (i * 37) % 260
+        pdf.rect(80 + i * 26, 120, 18, bar_height, stroke=1, fill=1)
+    pdf.setFont("Helvetica", 9)
+    pdf.drawString(80, 100, "$M")
+    pdf.showPage()
+
+    # Page 2 — scatter, no text whatsoever.
+    for i in range(60):
+        pdf.circle(120 + (i * 53) % 700, 120 + (i * 91) % 380, 6, stroke=1, fill=0)
+    pdf.showPage()
+
+    # Page 3 — grid.
+    for i in range(20):
+        pdf.line(60, 100 + i * 22, width - 60, 100 + i * 22)
+    for i in range(20):
+        pdf.line(60 + i * 34, 100, 60 + i * 34, height - 100)
+    pdf.showPage()
+
+    pdf.save()
+
 if __name__ == "__main__":
     build_pdf(HERE / "sample_deck.pdf")
     build_pptx(HERE / "sample_deck.pptx")
-    print(f"wrote {HERE / 'sample_deck.pdf'}")
-    print(f"wrote {HERE / 'sample_deck.pptx'}")
+    build_image_heavy_pdf(HERE / "image_heavy_deck.pdf")
+    for name in ("sample_deck.pdf", "sample_deck.pptx", "image_heavy_deck.pdf"):
+        print(f"wrote {HERE / name}")

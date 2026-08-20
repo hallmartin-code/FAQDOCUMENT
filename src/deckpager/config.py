@@ -41,6 +41,7 @@ _TOML_KEYS: dict[tuple[str, ...], str] = {
     ("model", "max_tokens"): "max_tokens",
     ("model", "effort"): "effort",
     ("ingest", "max_slides"): "max_slides",
+    ("ingest", "max_image_slides"): "max_image_slides",
     ("ingest", "max_image_bytes"): "max_image_bytes",
     ("ingest", "no_images"): "no_images",
 }
@@ -108,7 +109,10 @@ class Settings(BaseSettings):
     model: str = Field(default=DEFAULT_MODEL, description="Model ID for the chosen provider.")
     max_tokens: int = Field(default=32000, ge=1024, description="Max output tokens.")
     effort: Effort = Field(default="high", description="Reasoning effort level.")
-    max_slides: int = Field(default=60, ge=1, description="Slide cap per request.")
+    max_slides: int = Field(default=40, ge=1, description="Slide cap per request.")
+    max_image_slides: int = Field(
+        default=25, ge=0, description="How many leading slides may carry an image."
+    )
     max_image_bytes: int = Field(
         default=5_000_000, ge=0, description="Total raw image byte cap per request."
     )

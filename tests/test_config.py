@@ -56,7 +56,8 @@ class TestPrecedence:
         assert settings.provider == "anthropic"
         assert settings.model == "claude-opus-5"
         assert settings.effort == "high"
-        assert settings.max_slides == 60
+        assert settings.max_slides == 40
+        assert settings.max_image_slides == 25
 
     def test_environment_beats_the_toml(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DECKPAGER_PROVIDER", "fake")

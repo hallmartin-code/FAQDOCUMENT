@@ -165,8 +165,8 @@ def _transcript(deck: Deck) -> str:
         if slide.title:
             chunks.append(f"[title] {slide.title}")
         chunks.append(slide.text if slide.text else "[no extractable text on this slide]")
-        if slide.notes:
-            chunks.append(f"[speaker notes] {slide.notes}")
+        if slide.speaker_notes:
+            chunks.append(f"[speaker notes] {slide.speaker_notes}")
         chunks.append("")
     return "\n".join(chunks).strip()
 

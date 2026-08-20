@@ -8,9 +8,11 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from deckpager import __version__
 from deckpager.errors import DeckpagerError
+from deckpager.ingest.models import Deck
 
 # Windows consoles still default to a legacy code page, which turns the em-dashes and
 # arrows in prompts, warnings, and company names into replacement characters — or raises
@@ -52,6 +54,13 @@ ProviderOpt = Annotated[
         help="LLM backend: anthropic, openai, ollama, or fake. Overrides DECKPAGER_PROVIDER.",
     ),
 ]
+DryRunOpt = Annotated[
+    bool,
+    typer.Option(
+        "--dry-run",
+        help="Parse the deck and print what was read. No model call, no cost.",
+    ),
+]
 NoImagesOpt = Annotated[
     bool,
     typer.Option("--no-images", help="Skip slide rasterization; analyze text only."),
@@ -64,22 +73,84 @@ def _fail(exc: DeckpagerError) -> None:
     raise typer.Exit(code=exc.exit_code)
 
 
+def _print_deck_summary(deck: Deck) -> None:
+    """Print what ingestion actually read, one row per slide.
+
+    This is the whole payload of --dry-run: before spending money on a deck, an analyst
+    can see whether the text came out, which slides will be sent as pictures, and what
+    the budgets threw away.
+    """
+    from rich.table import Table
+
+    header = (
+        f"[bold]{deck.source_path.name}[/bold]  ·  {deck.source_format.upper()}  ·  "
+        f"{deck.slide_count} slides"
+    )
+    if deck.raw_pdf_b64 is not None:
+        header += "  ·  sent natively as a PDF document"
+    console.print(header)
+
+    table = Table(box=None, pad_edge=False, header_style="bold")
+    table.add_column("#", justify="right")
+    table.add_column("title")
+    table.add_column("chars", justify="right")
+    table.add_column("notes", justify="right")
+    table.add_column("image")
+    table.add_column("flags")
+    for slide in deck.slides:
+        flags = []
+        if slide.image_dominant:
+            flags.append("[yellow]image-dominant[/yellow]")
+        if slide.has_chart:
+            flags.append("chart")
+        table.add_row(
+            str(slide.index),
+            escape((slide.title or "-")[:44]),
+            str(len(slide.text)),
+            str(len(slide.speaker_notes or "")) if slide.speaker_notes else "-",
+            f"{slide.asset.byte_size / 1000:.0f} kB" if slide.asset else "-",
+            " ".join(flags),
+        )
+    console.print(table)
+
+    images = sum(1 for s in deck.slides if s.asset is not None)
+    text_chars = sum(len(s.text) for s in deck.slides)
+    console.print(
+        f"[dim]{text_chars:,} characters of text · {images} slide image(s) · "
+        f"{deck.image_bytes / 1_000_000:.1f} MB of images[/dim]"
+    )
+    for warning in deck.warnings:
+        err_console.print(f"[yellow]warning:[/yellow] {escape(warning)}")
+
+
 @app.command()
-def analyze(
-    deck: Annotated[Path, typer.Argument(help="Path to the pitch deck (.pdf or .pptx).")],
+def render(
+    deck: Annotated[
+        Path, typer.Argument(help="Path to the pitch deck (.pdf, .pptx, or .ppt).")
+    ],
     out: StemOpt = None,
     paper: PaperOpt = "letter",
     context: ContextOpt = None,
     provider: ProviderOpt = None,
     model: ModelOpt = None,
     no_images: NoImagesOpt = False,
+    dry_run: DryRunOpt = False,
     json_out: Annotated[
         Path | None,
         typer.Option("--json", help="Override where the analysis JSON is written."),
     ] = None,
 ) -> None:
-    """Analyze a deck: write the one-pager PDF and the analysis JSON."""
-    from deckpager.pipeline import run_pipeline
+    """Turn a deck into the one-pager PDF and its analysis JSON."""
+    from deckpager.config import load_settings
+    from deckpager.pipeline import ingest_deck, run_pipeline
+
+    if dry_run:
+        try:
+            settings = load_settings(provider=provider, model=model, no_images=no_images)
+            _print_deck_summary(ingest_deck(deck, settings))
+        except DeckpagerError as exc:
+            _fail(exc)
+        return
 
     try:
         run_pipeline(
@@ -98,19 +169,18 @@ def analyze(
 
 
 @app.command()
-def render(
+def redraw(
     assessment: Annotated[Path, typer.Argument(help="Path to an assessment JSON file.")],
     out: StemOpt = None,
     paper: PaperOpt = "letter",
 ) -> None:
-    """Render the one-pager from an existing assessment JSON. No model call."""
+    """Re-render the one-pager from an existing analysis JSON. No model call."""
     from deckpager.pipeline import run_render
 
     try:
         run_render(assessment=assessment, out_stem=out, paper=paper, console=console)
     except DeckpagerError as exc:
         _fail(exc)
-
 
 @app.command()
 def providers(model: ModelOpt = None) -> None:
