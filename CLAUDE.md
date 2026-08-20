@@ -348,7 +348,7 @@ is the unmodified fork, so `git log` separates inherited code from deckpager's o
 4. **Default model is `claude-opus-5`, not `claude-sonnet-4-6`** (§8). Set in
    `config/default.toml`; override with `--model` or `DECKPAGER_MODEL`.
 
-**Phase status:** Phases 0-3 complete. Phase 4 (the one-pager layout) next.
+**Phase status:** Phases 0-4 complete. Phase 5 (wiring extraction to the renderer) next.
 
 Phase 3 was verified against a real 30-page deck: 101s, 123,863 in / 7,239 out, ~$0.80,
 including one correction retry. A second run read the cache in 1.2s for nothing.

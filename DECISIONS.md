@@ -565,3 +565,80 @@ cap or an explicit instruction in the prompt.
 PRICING is a local table, and a local price table cannot help going stale. A model that
 is not in it gets estimated_cost_usd of None and a cost line that says so, instead of a
 confident number computed from a rate that may have changed.
+
+---
+
+## deckpager Phase 4 - The one-pager layout
+
+### DP28. The old renderer moved aside rather than being edited
+
+render/onepager.py and render/theme.py became legacy_onepager.py and legacy_theme.py,
+and the new pair took the good names. Both speak different schemas, both work, and the
+legacy pair dies with the old pipeline in Phase 5. Editing the old renderer in place
+would have produced a module that neither schema could rely on.
+
+### DP29. Measure and draw are the same code path
+
+Every drawing method takes an optional canvas and returns the height it consumed. With
+None it measures; with a canvas it draws exactly what it measured. The alternative -
+a measuring function beside a drawing function - is two implementations of one layout
+that drift apart, and the drift lands as a two-page one-pager.
+
+### DP30. A rung that does not reduce the overflow is reverted
+
+The page is two independent columns and most of spec 9 truncation ladder only shortens
+one of them. The first render of a real deck showed the cost: go-to-market and the
+business model were both truncated to relieve pressure in the *right* column, which they
+cannot affect, and the page still ended up at 7pt type. Each rung is now measured, and
+kept only if it actually helps. Same order, same priorities, no content thrown away for
+nothing.
+
+### DP31. And what the page does not need is given back
+
+The rungs are coarse - one diligence request is about 20 points - so the first layout
+that fits usually overshoots. After a fit, each applied reduction is offered back, newest
+first, and kept only if the page still fits without it. On the AccuBreath deck that
+returned the market note. Cost: a handful of measurements, no extra rendering.
+
+### DP32. The ladder needed rungs spec 9 does not list
+
+Spec 9 names four: go-to-market, business model, competition, market note. Measured on a
+real deck, the analyst block came out at 187pt against the roughly 101pt that spec 9
+budgets for it, and the right column wanted 482pt against 389pt available. None of the
+four rungs can close that, because the analyst block and the traction tiles are not among
+them.
+
+So the ladder gained: diligence requests 5 -> 3, traction tiles 6 -> 4, team 4 -> 3. All
+are content reductions of the same kind as the four, all are logged, and all come before
+typography - which now floors at 7.5pt rather than 7pt, because the inherited renderer
+had already established 8pt as the readable minimum across a meeting table.
+
+### DP33. The last rung is the one spec 3 actually asks for
+
+Every field at its schema maximum overflows the page by 970pt. No combination of dropping
+sections closes that: the schema permits roughly 2.7 times what one page holds. The
+ladder therefore ends with a global text scale that ellipsizes every prose field to a
+fraction of its length - which is exactly what spec 3 requires, truncation with an
+ellipsis at the field level rather than a second page.
+
+It is the last resort and it always works, so the one-page guarantee now holds for any
+schema-valid document rather than for typical ones. The overstuffed fixture exists to
+keep that true.
+
+### DP34. The flag count only counts what is on the page
+
+The first render said 2 fields were flagged and showed no marker anywhere: one was the
+stage, printed as a chip with no room for a dagger, and the other was the website, which
+spec 9 header does not include at all. A count the reader cannot reconcile is worse than
+no count.
+
+Chips now carry the dagger inline, the website rides beside the tagline (spec 6 puts it
+in the header block, spec 9 just does not say where), and the footer counts only fields
+in RENDERED_FIELDS.
+
+### DP35. Traction tiles size their type to the value
+
+Spec 9 asks for metric tiles, which implies numerals. Real extractions do not oblige:
+the schema allows a 120-character value and AccuBreath returned `Working device:
+feasibility and functionality proven`. Setting that at display size clipped it mid-word.
+A tile now uses display size for something numeral-shaped and body size for a sentence.
