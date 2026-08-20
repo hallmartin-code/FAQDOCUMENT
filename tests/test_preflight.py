@@ -119,4 +119,4 @@ def test_run_checks_covers_every_check_once(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("ANTHROPIC_API_KEY", SECRET)
     names = [r.name for r in run_checks(Settings())]
     assert names == sorted(set(names), key=names.index)  # no duplicates
-    assert {"python", "anthropic api key", "config/", "prompts/"} <= set(names)
+    assert {"python", "anthropic api key", "config/", "extraction cache"} <= set(names)

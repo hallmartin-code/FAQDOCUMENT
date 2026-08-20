@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>deckpager — TEN Capital</title>
+<style>
+  :root {
+    --ink: #14181f;
+    --accent: #1f3864;
+    --muted: #6b7280;
+    --tint: #eef2f8;
+    --panel: #f6f5f2;
+    --rule: #d8dce3;
+    --bad: #8c1d18;
+    --good: #2e7d32;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: #fff;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 48px 24px 72px; }
+  header { border-bottom: 2px solid var(--accent); padding-bottom: 18px; margin-bottom: 28px; }
+  h1 { margin: 0; font: 600 26px/1.2 Georgia, "Times New Roman", serif; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin-top: 6px; font-size: 14px; }
+  .drop {
+    border: 2px dashed var(--rule);
+    border-radius: 10px;
+    padding: 34px 24px;
+    text-align: center;
+    background: var(--tint);
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); background: #e6edf7; }
+  .drop strong { display: block; font-size: 16px; margin-bottom: 6px; }
+  .drop span { color: var(--muted); font-size: 13px; }
+  input[type=file] { display: none; }
+  .row { display: flex; gap: 18px; align-items: center; margin-top: 20px; flex-wrap: wrap; }
+  label.opt { font-size: 13px; color: var(--muted); display: flex; gap: 7px; align-items: center; }
+  select, input[type=number] {
+    font: inherit; font-size: 13px; padding: 5px 8px;
+    border: 1px solid var(--rule); border-radius: 5px; background: #fff; color: var(--ink);
+  }
+  button {
+    font: inherit; font-weight: 600; padding: 11px 22px;
+    background: var(--accent); color: #fff; border: 0; border-radius: 6px; cursor: pointer;
+  }
+  button:disabled { background: var(--muted); cursor: not-allowed; }
+  .panel {
+    margin-top: 28px; padding: 20px 22px;
+    background: var(--panel); border-radius: 10px; border: 1px solid var(--rule);
+  }
+  .panel h2 { margin: 0 0 4px; font: 600 17px/1.3 Georgia, serif; }
+  .stage { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .bar { height: 5px; background: var(--rule); border-radius: 3px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .5s; }
+  .note { font-size: 13px; margin-top: 12px; padding-left: 16px; position: relative; color: var(--muted); }
+  .note::before { content: "•"; position: absolute; left: 3px; }
+  .note.warn { color: var(--bad); }
+  .downloads { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+  .downloads a {
+    text-decoration: none; font-size: 14px; font-weight: 600; padding: 9px 16px;
+    border: 1px solid var(--accent); border-radius: 6px; color: var(--accent);
+  }
+  .downloads a.primary { background: var(--accent); color: #fff; }
+  .cost { margin-top: 14px; font-size: 12px; color: var(--muted); }
+  footer { margin-top: 44px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 14px; }
+  .hidden { display: none; }
+  code { background: var(--tint); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>deckpager</h1>
+    <div class="sub">Drop a pitch deck. Get a one-page TEN Capital investor one-pager, with every claim traceable to a slide.</div>
+  </header>
+
+  <form id="form">
+    <div class="drop" id="drop">
+      <strong id="dropLabel">Choose a deck, or drop one here</strong>
+      <span>__ACCEPT_LABEL__ · up to __MAX_MB__ MB</span>
+      <input type="file" id="file" accept="__ACCEPT__">
+    </div>
+
+    <div class="row">
+      <label class="opt">Paper
+        <select id="paper">
+          <option value="letter">US Letter</option>
+          <option value="a4">A4</option>
+        </select>
+      </label>
+      <label class="opt">Flag below
+        <input type="number" id="conf" value="0.6" min="0" max="1" step="0.05" style="width:72px">
+        confidence
+      </label>
+      <button type="submit" id="go" disabled>Generate one-pager</button>
+    </div>
+  </form>
+
+  <div class="panel hidden" id="panel">
+    <h2 id="title">Working…</h2>
+    <div class="stage" id="stage"></div>
+    <div class="bar"><i id="fill"></i></div>
+    <div id="notes"></div>
+    <div class="downloads hidden" id="downloads">
+      <a id="pdf" class="primary" href="#">Download PDF</a>
+      <a id="json" href="#">Download JSON</a>
+    </div>
+    <div class="cost hidden" id="cost"></div>
+  </div>
+
+  <footer>
+    A run takes a couple of minutes on a long deck; leave this tab open.
+    Uploads are deleted as soon as they are read, and the generated files expire from the
+    server after a few hours. Access control is <code>__AUTH__</code>. deckpager __VERSION__.
+  </footer>
+
+</div>
+
+<script>
+const ACCEPT = __ACCEPT_JSON__;
+const MAX_BYTES = __MAX_BYTES__;
+const STAGES = {
+  queued:     ["Queued",              5],
+  ingesting:  ["Reading the deck",   15],
+  extracting: ["Analysing the deck", 45],
+  cached:     ["Found in cache",     90],
+  rendering:  ["Laying out the page",90],
+  done:       ["Done",              100],
+  failed:     ["Failed",            100],
+};
+
+const $ = id => document.getElementById(id);
+let chosen = null;
+
+function choose(file) {
+  if (!file) return;
+  const dot = file.name.lastIndexOf(".");
+  const suffix = dot === -1 ? "" : file.name.slice(dot).toLowerCase();
+  if (!ACCEPT.includes(suffix)) {
+    alert(`${suffix || "That file type"} is not supported. Upload one of: ${ACCEPT.join(", ")}.`);
+    return;
+  }
+  if (file.size > MAX_BYTES) {
+    alert(`That deck is ${(file.size / 1048576).toFixed(1)} MB, over the ${(MAX_BYTES / 1048576).toFixed(0)} MB limit.`);
+    return;
+  }
+  chosen = file;
+  $("dropLabel").textContent = file.name;
+  $("go").disabled = false;
+}
+
+$("drop").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", e => choose(e.target.files[0]));
+["dragenter", "dragover"].forEach(t => $("drop").addEventListener(t, e => {
+  e.preventDefault(); $("drop").classList.add("over");
+}));
+["dragleave", "drop"].forEach(t => $("drop").addEventListener(t, e => {
+  e.preventDefault(); $("drop").classList.remove("over");
+}));
+$("drop").addEventListener("drop", e => choose(e.dataTransfer.files[0]));
+
+function note(text, warn) {
+  const el = document.createElement("div");
+  el.className = warn ? "note warn" : "note";
+  el.textContent = text;
+  $("notes").appendChild(el);
+}
+
+function paint(job) {
+  const [label, pct] = STAGES[job.stage] || ["Working", 30];
+  $("stage").textContent = label;
+  $("fill").style.width = pct + "%";
+
+  if (job.stage === "failed") {
+    $("title").textContent = "Could not produce a one-pager";
+    $("notes").innerHTML = "";
+    note(job.error || "Unknown error", true);
+    $("go").disabled = false;
+    return true;
+  }
+  if (job.stage !== "done") return false;
+
+  $("title").textContent = job.company || job.filename;
+  $("stage").textContent = job.tagline || "";
+  $("notes").innerHTML = "";
+  if (!job.is_pitch_deck) note("This document does not read as a pitch deck.", true);
+  (job.warnings || []).forEach(w => note(w, true));
+  (job.truncations || []).forEach(t => note(t + " (to keep it to one page)"));
+  if (job.flagged && job.flagged.length) {
+    note(`${job.flagged.length} field(s) below the confidence threshold: ${job.flagged.join(", ")}`);
+  }
+  $("pdf").href = `/api/jobs/${job.id}/pdf`;
+  $("json").href = `/api/jobs/${job.id}/json`;
+  $("downloads").classList.remove("hidden");
+  if (job.summary) { $("cost").textContent = job.summary; $("cost").classList.remove("hidden"); }
+  $("go").disabled = false;
+  return true;
+}
+
+async function poll(id) {
+  while (true) {
+    await new Promise(r => setTimeout(r, 2000));
+    const res = await fetch(`/api/jobs/${id}`);
+    if (!res.ok) { paint({ stage: "failed", error: "Lost track of the job — it may have expired." }); return; }
+    if (paint(await res.json())) return;
+  }
+}
+
+$("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (!chosen) return;
+
+  $("go").disabled = true;
+  $("panel").classList.remove("hidden");
+  $("downloads").classList.add("hidden");
+  $("cost").classList.add("hidden");
+  $("notes").innerHTML = "";
+  $("title").textContent = "Working…";
+  paint({ stage: "queued" });
+
+  const body = new FormData();
+  body.append("deck", chosen);
+  body.append("paper", $("paper").value);
+  body.append("min_confidence", $("conf").value);
+
+  const res = await fetch("/api/render", { method: "POST", body });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    paint({ stage: "failed", error: detail.detail || `Upload failed (${res.status}).` });
+    return;
+  }
+  poll((await res.json()).id);
+});
+</script>
+</body>
+</html>

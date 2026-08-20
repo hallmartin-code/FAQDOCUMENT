@@ -1,4 +1,4 @@
-"""Configuration: the precedence chain, the weights table, and provider selection."""
+"""Configuration: the precedence chain, the config file, and the CLI overrides."""
 
 from __future__ import annotations
 
@@ -9,18 +9,15 @@ from pathlib import Path
 import pytest
 
 from deckpager import paths
-from deckpager.analysis.schema import SCORECARD_ORDER
-from deckpager.config import Settings, _flatten_toml, load_settings, load_weights
+from deckpager.config import Settings, _flatten_toml, load_settings
 from deckpager.errors import ConfigError
-
-SCORED = [name for name in SCORECARD_ORDER if name != "Overall Investability"]
 
 
 @pytest.fixture(autouse=True)
 def isolated_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
     """Run each test against a known configuration, not the developer's own.
 
-    Both `paths` and `load_weights` memoize, so the caches are cleared on the way in and
+    `paths` memoizes, so the caches are cleared on the way in and
     again on the way out — otherwise a test that redirects DECKPAGER_CONFIG_DIR would
     poison every test that follows it.
     """
@@ -34,19 +31,8 @@ def isolated_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator
     monkeypatch.chdir(tmp_path)
 
     paths.clear_caches()
-    load_weights.cache_clear()
     yield
     paths.clear_caches()
-    load_weights.cache_clear()
-
-
-def _redirect_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, weights: dict) -> None:
-    """Point the config directory at a scratch weights.toml."""
-    body = "\n".join(f'"{name}" = {value}' for name, value in weights.items())
-    (tmp_path / "weights.toml").write_text(f"[weights]\n{body}\n", encoding="utf-8")
-    monkeypatch.setenv("DECKPAGER_CONFIG_DIR", str(tmp_path))
-    paths.clear_caches()
-    load_weights.cache_clear()
 
 
 class TestPrecedence:
@@ -127,53 +113,6 @@ class TestTomlMapping:
         assert flat == {"provider": "fake", "max_slides": 7}
 
 
-class TestWeights:
-    def test_shipped_weights_are_valid(self) -> None:
-        weights = load_weights()
-        assert len(weights) == 10
-        assert abs(sum(weights.values()) - 1.0) < 1e-6
-
-    def test_weights_cover_exactly_the_scored_categories(self) -> None:
-        """Overall Investability is the computed output, so weighting it would be circular."""
-        assert set(load_weights()) == set(SCORED)
-
-    @pytest.mark.parametrize(
-        ("weights", "expected"),
-        [
-            ({"Founder": 1.0}, "missing"),
-            (dict.fromkeys([*SCORED, "Nonsense"], 1 / 11), "unexpected"),
-        ],
-    )
-    def test_wrong_categories_are_rejected(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        weights: dict,
-        expected: str,
-    ) -> None:
-        _redirect_config(tmp_path, monkeypatch, weights)
-        with pytest.raises(ConfigError) as excinfo:
-            load_weights()
-        assert expected in str(excinfo.value)
-
-    def test_weights_that_do_not_sum_to_one_are_rejected(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _redirect_config(tmp_path, monkeypatch, dict.fromkeys(SCORED, 0.5))
-        message = str(pytest.raises(ConfigError, load_weights).value)
-        assert "must sum to 1.0" in message
-        assert "5.0" in message  # the actual total, so the fix is obvious
-
-    def test_negative_weight_is_rejected(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        weights = dict.fromkeys(SCORED, 0.2)
-        weights["Storytelling"] = -0.8
-        _redirect_config(tmp_path, monkeypatch, weights)
-        with pytest.raises(ConfigError, match="negative"):
-            load_weights()
-
-
 class TestConfigDirResolution:
     def test_env_override_pointing_at_nothing_names_the_variable(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -186,4 +125,3 @@ class TestConfigDirResolution:
 
     def test_repo_root_is_found_without_any_override(self) -> None:
         assert (paths.config_dir() / "default.toml").is_file()
-        assert (paths.prompts_dir() / "analyst_system.md").is_file()

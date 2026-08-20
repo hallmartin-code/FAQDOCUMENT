@@ -1,256 +1,107 @@
-"""End-to-end orchestration: ingest -> analyze -> validate -> render."""
+"""Deck in, one-pager out. The whole job, in one place.
+
+`run` is what both callers use — the CLI and the web app — so a deck analysed through the
+browser and a deck analysed at a terminal go through byte-identical code. All either caller
+supplies is somewhere to put the files and a way to hear about progress.
+"""
 
 from __future__ import annotations
 
-import hashlib
-import json
-import re
+import time
 from collections.abc import Callable
-from datetime import UTC, datetime
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
-from typing import cast
 
-from pydantic import ValidationError
-from rich.console import Console
+from deckpager.cache import ExtractionCache
+from deckpager.config import Settings
+from deckpager.extract.client import Extractor
+from deckpager.extract.pipeline import cost_line, extract_one_pager
+from deckpager.models import DEFAULT_MIN_CONFIDENCE, OnePager
+from deckpager.render.onepager import Paper, fit_and_render
 
-from deckpager.analysis.client import Analyzer, AnthropicAnalyzer
-from deckpager.analysis.grounding import ground
-from deckpager.analysis.schema import Assessment, RunMeta
-from deckpager.config import Settings, load_settings
-from deckpager.errors import ConfigError, DeckpagerError, RenderError, SchemaValidationError
-from deckpager.ingest import ingest_deck
-from deckpager.render.base import Paper
-
-_SLUG_STRIP = re.compile(r"[^\w\s-]")
-_SLUG_SPACE = re.compile(r"[\s_-]+")
-
-#: deckpager outputs are a one-page PDF, an optional multi-page memo, and the JSON.
-#: The .docx path was deckdd's format and is not part of this product.
-VALID_PAPER = ("letter", "a4")
+#: Called with a short stage name as each stage begins.
+StageHook = Callable[[str], None]
 
 
-def slugify(name: str) -> str:
-    """Turn a company name into a filename stem: punctuation stripped, spaces to underscores."""
-    cleaned = _SLUG_SPACE.sub("_", _SLUG_STRIP.sub("", name).strip())
-    return cleaned.strip("_") or "Assessment"
+@dataclass
+class RunResult:
+    """Everything a caller needs to report on a finished run."""
+
+    one_pager: OnePager
+    pdf: Path
+    json: Path
+    seconds: float = 0.0
+    truncations: list[str] = field(default_factory=list)
+
+    @property
+    def summary(self) -> str:
+        """The spec §10 success line."""
+        return cost_line(self.one_pager, self.seconds)
 
 
-def check_paper(paper: str) -> str:
-    """Validate the paper size before anything expensive runs."""
-    if paper not in VALID_PAPER:
-        raise RenderError(f"Unknown --paper {paper!r}. Choose one of: {', '.join(VALID_PAPER)}")
-    return paper
+def default_stem(deck_path: Path, one_pager: OnePager) -> str:
+    """`{CompanyName}-onepager`, falling back to the deck's own name.
 
-
-def default_stem(assessment: Assessment, source_dir: Path) -> Path:
-    """`{CompanyName}` alongside the input deck; the renderer appends `_onepager`."""
-    return source_dir / slugify(assessment.company_name)
-
-
-def analyze_deck(
-    *,
-    deck_path: Path,
-    context: str | None,
-    settings: Settings,
-    analyzer: Analyzer | None = None,
-    now: datetime | None = None,
-    console: Console | None = None,
-    on_stage: Callable[[str], None] | None = None,
-) -> Assessment:
-    """Ingest, analyze, ground, and stamp provenance. No rendering.
-
-    `on_stage` is called as each stage begins, so a caller that is not a terminal — the
-    web app — can show real progress. A run takes minutes; a progress bar that sits on one
-    stage the whole time is worse than none.
+    Named for the company rather than the upload, because the file lands in a folder of
+    other companies' one-pagers, and `deck-onepager.pdf` is not findable there.
     """
-    say = console.print if console else (lambda *_a, **_k: None)
+    name = one_pager.company_name.value or deck_path.stem
+    cleaned = "".join(ch if ch.isalnum() or ch in " -_" else "" for ch in name).strip()
+    return f"{cleaned.replace(' ', '_') or deck_path.stem}-onepager"
+
+
+def run(
+    deck_path: Path,
+    *,
+    settings: Settings,
+    out_dir: Path | None = None,
+    out_pdf: Path | None = None,
+    out_json: Path | None = None,
+    paper: Paper = "letter",
+    min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    use_cache: bool = True,
+    extractor: Extractor | None = None,
+    cache: ExtractionCache | None = None,
+    now: datetime | None = None,
+    on_stage: StageHook | None = None,
+    on_retry: Callable[[str], None] | None = None,
+) -> RunResult:
+    """Ingest, extract, render. Returns the artifacts and what the run cost."""
+    started = time.monotonic()
     stage = on_stage or (lambda _name: None)
 
-    stage("extracting")
-    say(f"[dim]ingesting[/dim] {deck_path.name}")
-    deck = ingest_deck(deck_path, settings)
-    say(f"[green]OK[/green] {deck.slide_count} slides ({deck.source_format})")
-    for warning in deck.warnings:
-        say(f"[yellow]warning:[/yellow] {warning}")
-
-    # Spec 4 names one LLM. `--provider` survives as a config knob for a future
-    # backend, but nothing else is wired, and honouring the flag in config while
-    # ignoring it here is the kind of silence that wastes an afternoon.
-    if analyzer is None and settings.provider != "anthropic":
-        raise ConfigError(
-            f"--provider {settings.provider} is not wired into the analysis pipeline. "
-            f"Run with --provider anthropic."
-        )
-
-    def _announce_retry(errors: str) -> None:
-        say("[yellow]schema validation failed; retrying once with the errors fed back:[/yellow]")
-        say(f"[dim]{errors}[/dim]")
-
-    engine = analyzer or AnthropicAnalyzer(settings, on_retry=_announce_retry)
-    stage("analyzing")
-    say(f"[dim]calling model[/dim] {settings.model} (effort={settings.effort})")
-    draft = engine.analyze(deck, context=context)
-
-    stage("grounding")
-    say("[dim]validating evidence against the deck[/dim]")
-    grounding_warnings = ground(draft, deck)
-    for warning in grounding_warnings:
-        say(f"[dim]{warning}[/dim]")
-
-    meta = RunMeta(
-        model=settings.model,
-        provider=settings.provider,
-        source_filename=deck_path.name,
-        sha256=file_sha256(deck_path),
-        slide_count=deck.slide_count,
-        ingest_warnings=list(deck.warnings),
-        grounding_warnings=grounding_warnings,
-        generated_at=now or datetime.now(UTC),
+    one_pager = extract_one_pager(
+        deck_path,
+        settings=settings,
+        extractor=extractor,
+        cache=cache,
+        use_cache=use_cache,
+        now=now,
+        on_stage=stage,
+        on_retry=on_retry,
     )
-    return Assessment.from_draft(draft, meta)
 
+    stage("rendering")
+    stem = default_stem(deck_path, one_pager)
+    directory = out_dir or deck_path.parent
+    pdf_path = out_pdf or directory / f"{stem}.pdf"
+    json_path = out_json or directory / f"{stem}.json"
 
-def file_sha256(path: Path) -> str | None:
-    """Hash the deck so the one-pager can identify exactly which file was analyzed.
-
-    Two versions of a deck usually share a filename; the hash is what tells a reader
-    whether the memo on their desk was written against the deck in their inbox.
-    """
-    digest = hashlib.sha256()
-    try:
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-    except OSError:
-        return None  # the provenance line states "sha256 unavailable" rather than failing
-    return digest.hexdigest()
-
-
-def load_assessment(path: Path) -> Assessment:
-    """Read an assessment JSON from disk, failing loudly if it does not validate."""
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise DeckpagerError(f"Could not read {path}: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise DeckpagerError(f"{path.name} is not valid JSON: {exc}") from exc
-    try:
-        return Assessment.model_validate(payload)
-    except ValidationError as exc:
-        raise SchemaValidationError(
-            f"{path.name} is not a valid deckpager assessment:\n{exc}"
-        ) from exc
-
-
-def render_assessment(
-    assessment: Assessment,
-    stem: Path,
-    *,
-    paper: str = "letter",
-    console: Console | None = None,
-) -> list[Path]:
-    """Render the one-pager, fitting it to a single page or failing loudly."""
-    from deckpager.render.fit import fit_to_one_page
-    from deckpager.render.legacy_onepager import OnePagerRenderer
-
-    say = console.print if console else (lambda *_a, **_k: None)
-    size = cast(Paper, check_paper(paper))
-    renderer = OnePagerRenderer()
-    if problems := renderer.preflight():
-        raise RenderError("\n".join(problems))
-
-    destination = stem.with_name(f"{stem.name}_onepager.pdf")
-    say(f"[dim]rendering[/dim] {destination.name}")
-
-    document, _layout, notes = fit_to_one_page(
-        overflow=lambda layout: renderer.overflow(assessment, layout, size),
-        render=lambda layout: renderer.render_onepager(
-            assessment, destination, paper=size, layout=layout
-        ),
+    pdf_path, truncations = fit_and_render(
+        one_pager, pdf_path, paper=paper, threshold=min_confidence
     )
-    for note in notes:
-        say(f"[dim]{note}[/dim]")
-        assessment.meta.method_notes.append(note)
-    return [document]
 
-
-def _report(assessment: Assessment, written: list[Path], console: Console) -> None:
-    """Print the success summary: paths, score, verdict, warnings."""
-    colour = {
-        "ADVANCE_TO_PARTNER_MEETING": "green",
-        "MORE_DILIGENCE": "yellow",
-        "PASS": "red",
-    }[assessment.ic_view.recommendation]
-    verdict = f"[{colour}]{assessment.ic_view.recommendation}[/{colour}]"
-    console.print()
-    for path in written:
-        console.print(f"[green]wrote[/green] {path}")
-    score = assessment.headline_score()
-    headline = f"{score:.1f}/10" if score is not None else "not scored"
-    console.print(
-        f"Overall Investability: [bold]{headline}[/bold]   "
-        f"Verdict: {verdict}   Confidence: {assessment.ic_view.confidence}"
-    )
-    for warning in assessment.meta.ingest_warnings:
-        console.print(f"[yellow]ingest warning:[/yellow] {warning}")
-    for warning in assessment.meta.grounding_warnings:
-        if not warning.startswith("Grounding: "):
-            console.print(f"[yellow]grounding warning:[/yellow] {warning}")
-
-
-def run_pipeline(
-    *,
-    deck: Path,
-    out_stem: Path | None,
-    paper: str,
-    context: str | None,
-    provider: str | None,
-    model: str | None,
-    no_images: bool,
-    console: Console,
-    json_out: Path | None = None,
-) -> None:
-    """`deckpager analyze` — ingest, analyze, and render in one pass."""
-    check_paper(paper)  # validate before paying for inference
-    settings = load_settings(provider=provider, model=model, no_images=no_images or None)
-    assessment = analyze_deck(deck_path=deck, context=context, settings=settings, console=console)
-    stem = out_stem or default_stem(assessment, deck.resolve().parent)
-    written = render_assessment(assessment, stem, paper=paper, console=console)
-    # JSON is written after rendering so it captures the fitting notes.
-    json_path = json_out or stem.with_name(f"{stem.name}_analysis.json")
+    # Recorded on the document, not only returned: someone reading the JSON months later
+    # needs to know the page they were handed was shortened, and by what.
+    one_pager.provenance.truncations = list(truncations)
     json_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(assessment.model_dump_json(indent=2) + "\n", encoding="utf-8")
-    _report(assessment, [json_path, *written], console)
+    json_path.write_text(one_pager.model_dump_json(indent=2) + "\n", encoding="utf-8")
 
-
-def run_analyze(
-    *,
-    deck: Path,
-    json_out: Path,
-    context: str | None,
-    provider: str | None,
-    model: str | None,
-    no_images: bool,
-    console: Console,
-) -> None:
-    """`deckpager analyze` — write the assessment JSON and stop."""
-    settings = load_settings(provider=provider, model=model, no_images=no_images or None)
-    assessment = analyze_deck(deck_path=deck, context=context, settings=settings, console=console)
-    json_out.parent.mkdir(parents=True, exist_ok=True)
-    json_out.write_text(assessment.model_dump_json(indent=2) + "\n", encoding="utf-8")
-    _report(assessment, [json_out], console)
-
-
-def run_render(
-    *,
-    assessment: Path,
-    out_stem: Path | None,
-    paper: str,
-    console: Console,
-) -> None:
-    """`deckpager render` — turn an existing assessment JSON into the one-pager."""
-    check_paper(paper)
-    parsed = load_assessment(assessment)
-    stem = out_stem or default_stem(parsed, assessment.resolve().parent)
-    written = render_assessment(parsed, stem, paper=paper, console=console)
-    _report(parsed, written, console)
+    return RunResult(
+        one_pager=one_pager,
+        pdf=pdf_path,
+        json=json_path,
+        seconds=time.monotonic() - started,
+        truncations=list(truncations),
+    )

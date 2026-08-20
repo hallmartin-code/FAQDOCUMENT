@@ -310,6 +310,10 @@ class Provenance(BaseModel):
         default=False, description="Whether this came from the extraction cache."
     )
     ingest_warnings: list[str] = pydantic.Field(default_factory=list)
+    citation_warnings: list[str] = pydantic.Field(
+        default_factory=list,
+        description="Slide citations that do not correspond to a slide in the deck.",
+    )
     truncations: list[str] = pydantic.Field(
         default_factory=list,
         description="What the renderer shortened to make the page fit (spec §9).",

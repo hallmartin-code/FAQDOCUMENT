@@ -15,7 +15,8 @@ from deckpager import __version__
 from deckpager.errors import EXIT_BAD_INPUT, DeckpagerError
 from deckpager.ingest.models import Deck
 from deckpager.models import DEFAULT_MIN_CONFIDENCE
-from deckpager.render.onepager import PAGE_SIZES, Paper
+from deckpager.pipeline import RunResult
+from deckpager.render.onepager import PAGE_SIZES, RENDERED_FIELDS, Paper
 
 # Windows consoles still default to a legacy code page, which turns the em-dashes and
 # arrows in prompts, warnings, and company names into replacement characters — or raises
@@ -153,46 +154,84 @@ def render(
     deck: Annotated[
         Path, typer.Argument(help="Path to the pitch deck (.pdf, .pptx, or .ppt).")
     ],
-    out: StemOpt = None,
-    paper: PaperOpt = "letter",
-    context: ContextOpt = None,
-    provider: ProviderOpt = None,
+    out: Annotated[
+        Path | None,
+        typer.Option("-o", "--out", help="Output PDF path. Default: <Company>-onepager.pdf"),
+    ] = None,
     model: ModelOpt = None,
-    no_images: NoImagesOpt = False,
-    dry_run: DryRunOpt = False,
     json_out: Annotated[
         Path | None,
-        typer.Option("--json", help="Override where the analysis JSON is written."),
+        typer.Option("--json", help="Also write the extracted one-pager JSON here."),
     ] = None,
+    no_cache: NoCacheOpt = False,
+    paper: PaperOpt = "letter",
+    min_confidence: Annotated[
+        float,
+        typer.Option("--min-confidence", help="Below this, a field is flagged."),
+    ] = DEFAULT_MIN_CONFIDENCE,
+    no_images: NoImagesOpt = False,
+    dry_run: DryRunOpt = False,
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show the full traceback on failure."),
+    ] = False,
 ) -> None:
-    """Turn a deck into the one-pager PDF and its analysis JSON."""
+    """Turn a deck into the one-pager PDF and its JSON."""
     from deckpager.config import load_settings
     from deckpager.ingest import ingest_deck
-    from deckpager.pipeline import run_pipeline
-
-    if dry_run:
-        try:
-            settings = load_settings(provider=provider, model=model, no_images=no_images)
-            _print_deck_summary(ingest_deck(deck, settings))
-        except DeckpagerError as exc:
-            _fail(exc)
-        return
+    from deckpager.pipeline import run
 
     try:
-        run_pipeline(
-            deck=deck,
-            out_stem=out,
-            paper=paper,
-            context=context,
-            provider=provider,
-            model=model,
-            no_images=no_images,
-            json_out=json_out,
-            console=console,
+        settings = load_settings(model=model, no_images=no_images)
+
+        if dry_run:
+            _print_deck_summary(ingest_deck(deck, settings))
+            return
+
+        result = run(
+            deck,
+            settings=settings,
+            out_pdf=out,
+            out_json=json_out,
+            paper=_paper(paper),
+            min_confidence=min_confidence,
+            use_cache=not no_cache,
+            on_stage=lambda name: console.print(f"[dim]{name}[/dim] {deck.name}"),
+            on_retry=_announce_schema_retry,
         )
     except DeckpagerError as exc:
+        if verbose:
+            raise
         _fail(exc)
+        return
 
+    _report(result, min_confidence)
+
+
+def _report(result: RunResult, min_confidence: float) -> None:
+    """Everything the operator needs to judge the run, after the files are written."""
+    provenance = result.one_pager.provenance
+    for warning in provenance.ingest_warnings + provenance.citation_warnings:
+        err_console.print(f"[yellow]warning:[/yellow] {escape(warning)}")
+    for cut in result.truncations:
+        err_console.print(f"[yellow]fitted:[/yellow] {escape(cut)} (to keep it to one page)")
+
+    weak = [
+        name
+        for name in result.one_pager.low_confidence_fields(min_confidence)
+        if name in set(RENDERED_FIELDS)
+    ]
+    if weak:
+        console.print(
+            f"[yellow]{len(weak)} field(s) below {min_confidence:.0%} confidence:[/yellow] "
+            f"{escape(', '.join(sorted(weak)))}"
+        )
+    if not result.one_pager.is_pitch_deck:
+        err_console.print("[yellow]This document does not read as a pitch deck.[/yellow]")
+
+    console.print(f"[green]wrote[/green] {result.pdf}")
+    console.print(f"[green]wrote[/green] {result.json}")
+    console.print(f"[dim]{result.summary}[/dim]")
 
 @app.command()
 def extract(

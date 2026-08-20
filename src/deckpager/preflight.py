@@ -20,7 +20,7 @@ from enum import Enum
 from deckpager.config import Settings
 from deckpager.errors import ConfigError
 from deckpager.ingest.legacy_ppt import find_soffice, install_hint
-from deckpager.paths import config_dir, prompts_dir
+from deckpager.paths import config_dir
 
 #: The interpreter floor, mirroring `requires-python` in pyproject.toml. Held in a
 #: constant rather than compared inline so it reads as the project's declared minimum,
@@ -176,9 +176,9 @@ def check_cache() -> CheckResult:
 
 
 def check_data_dirs() -> list[CheckResult]:
-    """The analyst-editable config/ and prompts/ directories must be locatable."""
+    """The operator-editable config/ directory must be locatable."""
     results: list[CheckResult] = []
-    for label, resolve in (("config/", config_dir), ("prompts/", prompts_dir)):
+    for label, resolve in (("config/", config_dir),):
         try:
             results.append(CheckResult(label, Status.OK, str(resolve())))
         except ConfigError as exc:

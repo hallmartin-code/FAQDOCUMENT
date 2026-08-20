@@ -1,8 +1,12 @@
-"""Rendering: the Renderer contract, the ReportLab engine, and the fitting ladder."""
+"""Rendering: the one-pager renderer, its fitting ladder, and the house style."""
 
 from __future__ import annotations
 
-from deckpager.render.base import Layout, Paper, Renderer
-from deckpager.render.legacy_onepager import OnePagerRenderer
+from deckpager.render.onepager import (
+    OnePagerRenderer,
+    PageLayout,
+    Paper,
+    fit_and_render,
+)
 
-__all__ = ["Layout", "OnePagerRenderer", "Paper", "Renderer"]
+__all__ = ["OnePagerRenderer", "PageLayout", "Paper", "fit_and_render"]

@@ -13,7 +13,6 @@ than silently ignored.
 from __future__ import annotations
 
 import tomllib
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal, get_args
 
@@ -194,59 +193,3 @@ def load_settings(
         return Settings(**{**settings.model_dump(), **overrides})
     except ValueError as exc:
         raise ConfigError(f"Invalid option: {exc}") from exc
-
-
-@lru_cache(maxsize=1)
-def load_weights() -> dict[str, float]:
-    """Read `config/weights.toml`, validated against the scorecard it has to cover.
-
-    Returns the ten input-category weights. "Overall Investability" is the computed
-    output and carries no weight of its own.
-    """
-    from deckpager.analysis.schema import SCORECARD_ORDER
-
-    path = config_dir() / "weights.toml"
-    expected = set(SCORECARD_ORDER) - {"Overall Investability"}
-    try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except tomllib.TOMLDecodeError as exc:
-        raise ConfigError(f"{path} is not valid TOML: {exc}") from exc
-    except OSError as exc:
-        raise ConfigError(
-            f"Could not read {path}: {exc}\n"
-            f"It ships with deckpager; restore it from version control if it was moved."
-        ) from exc
-
-    table = data.get("weights")
-    if not isinstance(table, dict):
-        raise ConfigError(f"{path} must contain a [weights] table.")
-
-    missing = sorted(expected - set(table))
-    unexpected = sorted(set(table) - expected)
-    if missing or unexpected:
-        detail = []
-        if missing:
-            detail.append(f"missing {missing}")
-        if unexpected:
-            detail.append(f"unexpected {unexpected}")
-        raise ConfigError(
-            f"{path} must weight exactly the ten scored categories ({'; '.join(detail)}).\n"
-            f"'Overall Investability' is computed from the others and must not be listed."
-        )
-
-    weights: dict[str, float] = {}
-    for name, value in table.items():
-        if not isinstance(value, int | float) or isinstance(value, bool):
-            raise ConfigError(f"{path}: weight for {name!r} must be a number, got {value!r}.")
-        if value < 0:
-            raise ConfigError(f"{path}: weight for {name!r} is negative ({value}).")
-        weights[name] = float(value)
-
-    total = sum(weights.values())
-    if abs(total - 1.0) > 1e-6:
-        raise ConfigError(
-            f"{path}: the ten weights must sum to 1.0, but they sum to {total:.6f}.\n"
-            f"Adjust them so the weighted overall stays on the same 1-10 scale as the "
-            f"categories it is built from."
-        )
-    return weights

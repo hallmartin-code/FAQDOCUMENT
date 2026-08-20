@@ -34,6 +34,21 @@ def cache_options(settings: Settings) -> dict[str, object]:
     }
 
 
+def check_citations(draft: OnePagerDraft, slide_count: int) -> list[str]:
+    """Report any slide citation that does not point at a slide in this deck.
+
+    The schema can enforce that a citation is a positive integer; it cannot know how many
+    slides the deck had. A citation past the end is the cheapest available signal that a
+    field was reasoned about rather than read, so it is recorded rather than corrected.
+    """
+    stray = sorted(n for n in draft.cited_slides() if n > slide_count)
+    if not stray:
+        return []
+    return [
+        f"Cited slide(s) {stray} do not exist: the deck has {slide_count}. "
+        f"Treat the fields citing them with care."
+    ]
+
 def extract_one_pager(
     deck_path: Path,
     *,
@@ -90,6 +105,7 @@ def extract_one_pager(
         estimated_cost_usd=result.usage.cost_usd,
         cached=was_cached,
         ingest_warnings=list(deck.warnings),
+        citation_warnings=check_citations(result.draft, deck.slide_count),
     )
     return OnePager.from_draft(result.draft, provenance)
 

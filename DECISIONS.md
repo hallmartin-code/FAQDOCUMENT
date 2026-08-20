@@ -678,3 +678,62 @@ It is also a question for the operator: three fields are being paid for and not 
 The inherited templates/onepager.md described the Assessment document, not this one. It
 became legacy_onepager.md alongside legacy_onepager.py and legacy_theme.py, and its test
 became test_legacy_template_spec.py. All four go together in Phase 5.
+
+---
+
+## deckpager Phase 5 - Wiring, and the web app
+
+### DP39. One run function, two callers
+
+pipeline.run is what the CLI and the web app both call. A deck analysed in a browser and
+the same deck analysed at a terminal go through byte-identical code, and there is one
+place to change when the sequence changes. The callers supply only somewhere to put the
+files and a way to hear about progress.
+
+### DP40. The legacy Assessment stack is gone
+
+Deleted: analysis/ (client, grounding, prompts, schema), render/legacy_onepager.py,
+render/legacy_theme.py, render/base.py, render/fit.py, the old pipeline, prompts/,
+config/weights.toml, templates/legacy_onepager.md, and five test modules. Roughly 2,000
+lines. Nothing in the current path referenced any of it.
+
+config.load_weights and paths.prompts_dir went with them: the scorecard weights and the
+externalized prompt files were both Assessment-era, and the extraction prompt now lives
+beside the code that hashes it into the cache key (DP28).
+
+### DP41. Grounding became a citation check
+
+The old grounding.py verified quoted text against the deck. The new schema has no quotes
+- it has slide citations - so the equivalent check is narrower and much cheaper: a cited
+slide number past the end of the deck is recorded in provenance.citation_warnings and
+surfaced by both callers. The schema can enforce that a citation is a positive integer;
+only the pipeline knows how many slides there were.
+
+### DP42. Railway deployment, with the app open by default and saying so
+
+Procfile, railway.json, requirements.txt, runtime.txt. Jobs run in a worker thread behind
+a concurrency cap, because a run takes minutes and holding the HTTP request open would
+hit the platform proxy timeout and lose work that has already been paid for. The browser
+polls.
+
+APP_PASSWORD is optional rather than mandatory, which is a real risk: unset, anyone with
+the URL can spend the deployment key. It stays optional so a deployment can be opened
+deliberately, and /healthz reports auth_enabled so the state is checkable without logging
+in. The README leads with the warning.
+
+### DP43. A rejected oversize upload was leaving the partial deck on the server
+
+Found by the test written for it. The cleanup ran shutil.rmtree while the file handle was
+still open; Windows refuses to delete an open file and ignore_errors=True swallowed the
+refusal, so the partial upload survived. On a server that is a confidential document
+persisting after the request that created it was refused.
+
+The write loop now breaks, closes, and then deletes. Ported from a codebase where the
+same code had presumably been running on Linux, where it happens to work.
+
+### DP44. Two things the deployed environment cannot do
+
+The extraction cache is per-container, so the first run of a deck after a redeploy pays
+full price; a mounted volume plus DECKPAGER_CACHE_DIR fixes it if that matters. And .ppt
+will not convert, because the Nixpacks image has no LibreOffice. Both are in the README
+rather than left to be discovered.

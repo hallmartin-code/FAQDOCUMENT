@@ -73,12 +73,12 @@ class TestDryRun:
         self, sample_pdf: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The guarantee that makes --dry-run free. Asserted, not assumed."""
-        import deckpager.analysis.client as client
+        import deckpager.extract.client as client
 
         def explode(*_args: object, **_kwargs: object) -> None:
-            raise AssertionError("--dry-run must not construct an analyzer")
+            raise AssertionError("--dry-run must not construct an extractor")
 
-        monkeypatch.setattr(client.AnthropicAnalyzer, "__init__", explode)
+        monkeypatch.setattr(client.AnthropicExtractor, "__init__", explode)
         result = runner.invoke(app, ["render", str(sample_pdf), "--dry-run"])
         assert result.exit_code == 0
 
