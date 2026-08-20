@@ -52,7 +52,7 @@ def memo(tmp_path: Path) -> Path:
 
 class TestSections:
     def test_headings_become_numbered_sections(self, memo: Path) -> None:
-        deck = load_docx(memo)
+        deck = load_docx(memo, want_images=False)
         assert [s.title for s in deck.slides] == [
             "Northwind Robotics",
             "The problem",
@@ -61,33 +61,33 @@ class TestSections:
         assert [s.index for s in deck.slides] == [1, 2, 3]
 
     def test_the_format_is_recorded(self, memo: Path) -> None:
-        assert load_docx(memo).source_format == "docx"
+        assert load_docx(memo, want_images=False).source_format == "docx"
 
     def test_prose_lands_under_its_own_heading(self, memo: Path) -> None:
-        deck = load_docx(memo)
+        deck = load_docx(memo, want_images=False)
         assert "12 miles a shift" in deck.slides[1].text
         assert "12 miles a shift" not in deck.slides[0].text
 
     def test_tables_are_flattened_in_place(self, memo: Path) -> None:
         """A table must stay with the prose it belongs to, not be appended at the end."""
-        deck = load_docx(memo)
+        deck = load_docx(memo, want_images=False)
         assert "ARR: $400K | $1.2M" in deck.slides[2].text
 
     def test_no_page_images_are_produced(self, memo: Path) -> None:
-        assert all(s.asset is None for s in load_docx(memo).slides)
+        assert all(s.asset is None for s in load_docx(memo, want_images=False).slides)
 
 
 class TestDegenerateDocuments:
     def test_a_document_without_headings_is_still_split(self, tmp_path: Path) -> None:
         long_prose = [("", "Sentence number %d in a long unstructured memo." % i) for i in range(220)]
-        deck = load_docx(_write(tmp_path / "flat.docx", long_prose))
+        deck = load_docx(want_images=False, path=_write(tmp_path / "flat.docx", long_prose))
         assert deck.slide_count > 1
         assert all(len(s.text) <= MAX_SECTION_CHARS * 1.5 for s in deck.slides)
         assert any("no headings" in w for w in deck.warnings)
 
     def test_an_empty_document_fails_with_an_actionable_message(self, tmp_path: Path) -> None:
         with pytest.raises(IngestError) as exc:
-            load_docx(_write(tmp_path / "empty.docx", [("", "   ")]))
+            load_docx(want_images=False, path=_write(tmp_path / "empty.docx", [("", "   ")]))
         assert "no readable text" in str(exc.value)
 
     def test_inline_images_are_declared_not_silently_dropped(self, tmp_path: Path) -> None:
@@ -104,7 +104,7 @@ class TestDegenerateDocuments:
         document.add_picture(str(tmp_path / "dot.png"))
         document.save(str(path))
 
-        deck = load_docx(path)
+        deck = load_docx(path, want_images=False)
         assert any("inline image" in w for w in deck.warnings)
 
 
@@ -123,14 +123,14 @@ class TestRouting:
 
 class TestPromptFraming:
     def test_sections_are_not_called_slides(self, memo: Path) -> None:
-        deck = load_docx(memo)
+        deck = load_docx(memo, want_images=False)
         assert unit_label(deck) == "SECTION"
         payload = slide_text(deck)
         assert "--- SECTION 1 ---" in payload
         assert "SLIDE" not in payload
 
     def test_the_instruction_says_what_the_numbers_mean(self, memo: Path) -> None:
-        text = build_user_blocks(load_docx(memo))[-1]["text"]
+        text = build_user_blocks(load_docx(memo, want_images=False))[-1]["text"]
         assert "not a slide deck" in text
         assert "source_slides" in text
 
@@ -150,7 +150,7 @@ class TestBoldHeadings:
 
     def test_bold_lines_are_treated_as_headings(self, tmp_path: Path) -> None:
         path = self._bold_doc(tmp_path / "memo.docx", ["Target Markets", "Use of Funds"])
-        deck = load_docx(path)
+        deck = load_docx(path, want_images=False)
         assert [s.title for s in deck.slides] == ["Target Markets", "Use of Funds"]
         assert any("bold single-line paragraphs" in w for w in deck.warnings)
 
@@ -162,7 +162,7 @@ class TestBoldHeadings:
         paragraph.add_run("We grew revenue by 300% last year and expect to double again.").bold = True
         document.add_paragraph("Supporting detail follows here.")
         document.save(str(path))
-        assert load_docx(path).slide_count == 1
+        assert load_docx(path, want_images=False).slide_count == 1
 
     def test_styled_headings_win_over_the_bold_heuristic(self, tmp_path: Path) -> None:
         """The heuristic is a fallback; a properly styled document never reaches it."""
@@ -176,7 +176,7 @@ class TestBoldHeadings:
         document.add_paragraph("More prose.")
         document.save(str(path))
 
-        deck = load_docx(path)
+        deck = load_docx(path, want_images=False)
         assert [s.title for s in deck.slides] == ["Real Heading", "Second Heading"]
         assert "Bold Line" in deck.slides[0].text
         assert not any("bold single-line" in w for w in deck.warnings)

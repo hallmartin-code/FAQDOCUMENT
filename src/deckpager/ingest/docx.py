@@ -148,7 +148,7 @@ def _split_into_sections(
     return sections
 
 
-def load_docx(path: Path, *, want_images: bool = True) -> Deck:
+def load_docx(path: Path, *, want_images: bool) -> Deck:
     """Read a DOCX into a Deck, one section per heading.
 
     `want_images` is accepted for signature parity with the other loaders and ignored:

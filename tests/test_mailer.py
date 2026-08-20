@@ -25,7 +25,7 @@ from deckpager.mailer import (
     send,
     subject_for,
 )
-from deckpager.models import OnePager
+from deckpager.models import Faq
 from deckpager.pipeline import RunResult
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -33,20 +33,20 @@ SECRET = "re_do_not_print_me_0123456789"
 
 
 @pytest.fixture
-def one_pager() -> OnePager:
-    return OnePager.model_validate(
-        json.loads((FIXTURES / "sample_onepager.json").read_text(encoding="utf-8"))
+def faq() -> Faq:
+    return Faq.model_validate(
+        json.loads((FIXTURES / "sample_faq.json").read_text(encoding="utf-8"))
     )
 
 
 @pytest.fixture
-def result(one_pager: OnePager, tmp_path: Path) -> RunResult:
-    pdf = tmp_path / "Helion_Bio-onepager.pdf"
-    js = tmp_path / "Helion_Bio-onepager.json"
+def result(faq: Faq, tmp_path: Path) -> RunResult:
+    pdf = tmp_path / "Helion_Bio-faq.pdf"
+    js = tmp_path / "Helion_Bio-faq.json"
     pdf.write_bytes(b"%PDF-1.4 pretend this is the one-pager")
-    js.write_text(one_pager.model_dump_json(), encoding="utf-8")
+    js.write_text(faq.model_dump_json(), encoding="utf-8")
     return RunResult(
-        one_pager=one_pager,
+        faq=faq,
         pdf=pdf,
         json=js,
         seconds=8.2,
@@ -89,120 +89,126 @@ class TestSwitch:
         assert settings.email_enabled is False
 
     def test_sending_while_disabled_is_a_skip_not_an_error(
-        self, one_pager: OnePager, result: RunResult, disabled: Settings
+        self, faq: Faq, result: RunResult, disabled: Settings
     ) -> None:
-        outcome = send(one_pager, result, disabled)
+        outcome = send(faq, result, disabled)
         assert outcome.sent is False
         assert "RESEND_API_KEY" in outcome.detail
 
 
 class TestMessage:
-    def test_the_subject_names_the_company(self, one_pager: OnePager) -> None:
-        assert subject_for(one_pager) == "Helion Bio — TEN Capital one-pager"
+    def test_the_subject_names_the_company(self, faq: Faq) -> None:
+        assert subject_for(faq) == "Helion Bio - TEN Capital investor FAQ (18/20 answered)"
 
-    def test_the_subject_falls_back_to_the_deck_name(self, one_pager: OnePager) -> None:
-        one_pager.company_name.value = None
-        assert "helion_bio_seed_deck" in subject_for(one_pager)
+    def test_the_subject_falls_back_to_the_deck_name(self, faq: Faq) -> None:
+        faq.company_name.value = None
+        assert "helion_bio_seed_deck" in subject_for(faq)
 
-    def test_the_body_carries_the_analyst_layer(
-        self, one_pager: OnePager, result: RunResult
+    def test_the_body_carries_the_open_questions(
+        self, faq: Faq, result: RunResult
     ) -> None:
-        html = build_html(one_pager, result, 0.6)
-        for item in (one_pager.key_strengths.value or []) + (one_pager.key_risks.value or []):
-            assert item in html
+        html = build_html(faq, result, 0.6)
+        assert "Ask the founders" in html
+        for question in faq.unanswered():
+            assert question.text in html
 
     def test_the_body_labels_the_analysis_as_generated(
-        self, one_pager: OnePager, result: RunResult
+        self, faq: Faq, result: RunResult
     ) -> None:
         """The same rule as the page: it must never read as something the founders wrote."""
-        assert "AI-generated" in build_html(one_pager, result, 0.6)
-        assert "not the deck" in build_text(one_pager, result)
+        assert "AI-generated" in build_html(faq, result, 0.6)
+        assert "not the deck" in build_text(faq, result)
 
-    def test_the_body_reports_what_was_truncated(
-        self, one_pager: OnePager, result: RunResult
+    def test_the_body_reports_ingest_warnings(
+        self, faq: Faq, result: RunResult
     ) -> None:
-        assert "market note truncated" in build_html(one_pager, result, 0.6)
+        """Truncation warnings are gone with the fitting ladder; ingest warnings remain,
+        and a reader has to be told when the deck reached the model incomplete."""
+        faq.provenance.ingest_warnings = ["images were dropped from 4 slides"]
+        assert "images were dropped from 4 slides" in build_html(faq, result, 0.6)
 
     def test_the_body_reports_flagged_fields(
-        self, one_pager: OnePager, result: RunResult
+        self, faq: Faq, result: RunResult
     ) -> None:
-        html = build_html(one_pager, result, 0.6)
+        html = build_html(faq, result, 0.6)
         assert "below 60% confidence" in html
 
     def test_a_clean_run_says_so_rather_than_showing_an_empty_box(
-        self, one_pager: OnePager, result: RunResult
+        self, faq: Faq, result: RunResult
     ) -> None:
-        for name in type(one_pager).model_fields:
-            field = getattr(one_pager, name, None)
+        for name in type(faq).model_fields:
+            field = getattr(faq, name, None)
             if hasattr(field, "confidence"):
                 field.confidence = 0.99
+        for entry in faq.entries:
+            entry.answer.confidence = 0.99
         result.truncations = []
-        assert "No caveats" in build_html(one_pager, result, 0.6)
+        assert "No caveats" in build_html(faq, result, 0.6)
 
     def test_company_names_are_escaped(
-        self, one_pager: OnePager, result: RunResult
+        self, faq: Faq, result: RunResult
     ) -> None:
         """A company name is model output landing in HTML. It gets escaped."""
-        one_pager.company_name.value = "<script>alert(1)</script>"
-        html = build_html(one_pager, result, 0.6)
+        faq.company_name.value = "<script>alert(1)</script>"
+        html = build_html(faq, result, 0.6)
         assert "<script>alert(1)</script>" not in html
         assert "&lt;script&gt;" in html
 
     def test_the_text_alternative_is_readable_without_html(
-        self, one_pager: OnePager, result: RunResult
+        self, faq: Faq, result: RunResult
     ) -> None:
-        text = build_text(one_pager, result)
+        text = build_text(faq, result)
         assert "Helion Bio" in text
-        assert "STRENGTHS" in text
+        assert "ASK THE FOUNDERS" in text
         assert "<" not in text
 
 
 class TestPayload:
     def test_the_pdf_is_attached(
-        self, one_pager: OnePager, result: RunResult, enabled: Settings
+        self, faq: Faq, result: RunResult, enabled: Settings
     ) -> None:
-        payload = build_payload(one_pager, result, enabled)
+        payload = build_payload(faq, result, enabled)
         names = [a["filename"] for a in payload["attachments"]]
         assert result.pdf.name in names
 
     def test_the_json_attachment_can_be_turned_off(
-        self, one_pager: OnePager, result: RunResult, enabled: Settings
+        self, faq: Faq, result: RunResult, enabled: Settings
     ) -> None:
         without = enabled.model_copy(update={"email_attach_json": False})
-        payload = build_payload(one_pager, result, without)
+        payload = build_payload(faq, result, without)
         assert [a["filename"] for a in payload["attachments"]] == [result.pdf.name]
 
     def test_a_missing_artifact_is_skipped_rather_than_crashing(
-        self, one_pager: OnePager, result: RunResult, enabled: Settings
+        self, faq: Faq, result: RunResult, enabled: Settings
     ) -> None:
         result.pdf.unlink()
-        payload = build_payload(one_pager, result, enabled)
+        payload = build_payload(faq, result, enabled)
         assert result.pdf.name not in [a["filename"] for a in payload["attachments"]]
 
     def test_an_oversized_attachment_is_dropped(
         self,
-        one_pager: OnePager,
+        faq: Faq,
         result: RunResult,
         enabled: Settings,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(mailer, "MAX_ATTACHMENT_BYTES", 4)
-        assert build_payload(one_pager, result, enabled)["attachments"] == []
+        assert build_payload(faq, result, enabled)["attachments"] == []
 
     def test_several_recipients_are_split(
-        self, one_pager: OnePager, result: RunResult, enabled: Settings
+        self, faq: Faq, result: RunResult, enabled: Settings
     ) -> None:
         many = enabled.model_copy(
             update={"report_email_to": "Info@tencapital.group, hall@tencapital.group"}
         )
-        payload = build_payload(one_pager, result, many)
+        payload = build_payload(faq, result, many)
         assert payload["to"] == ["Info@tencapital.group", "hall@tencapital.group"]
 
     def test_the_payload_never_contains_the_key(
-        self, one_pager: OnePager, result: RunResult, enabled: Settings
+        self, faq: Faq, result: RunResult, enabled: Settings
     ) -> None:
         """The key belongs in the Authorization header and nowhere else."""
-        assert SECRET not in json.dumps(build_payload(one_pager, result, enabled))
+        assert SECRET not in json.dumps(build_payload(faq, result, enabled))
 
 
 class TestSending:
@@ -233,32 +239,32 @@ class TestSending:
 
     def test_a_successful_send_reports_the_message_id(
         self,
-        one_pager: OnePager,
+        faq: Faq,
         result: RunResult,
         enabled: Settings,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         self._stub(monkeypatch)
-        outcome = send(one_pager, result, enabled)
+        outcome = send(faq, result, enabled)
         assert outcome.sent is True
         assert outcome.message_id == "msg_123"
         assert "Info@tencapital.group" in outcome.detail
 
     def test_the_key_travels_in_the_authorization_header(
         self,
-        one_pager: OnePager,
+        faq: Faq,
         result: RunResult,
         enabled: Settings,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         captured = self._stub(monkeypatch)
-        send(one_pager, result, enabled)
+        send(faq, result, enabled)
         assert captured[0].headers["Authorization"] == f"Bearer {SECRET}"
         assert captured[0].full_url == mailer.RESEND_ENDPOINT
 
     def test_the_request_identifies_itself(
         self,
-        one_pager: OnePager,
+        faq: Faq,
         result: RunResult,
         enabled: Settings,
         monkeypatch: pytest.MonkeyPatch,
@@ -269,14 +275,14 @@ class TestSending:
         response body, so it cost a live debugging round. The header stays.
         """
         captured = self._stub(monkeypatch)
-        send(one_pager, result, enabled)
+        send(faq, result, enabled)
         # urllib normalises header names to Capitalised form.
         assert captured[0].headers["User-agent"] == mailer.USER_AGENT
         assert "deckpager" in captured[0].headers["User-agent"]
 
     def test_a_rejection_explains_itself_without_raising(
         self,
-        one_pager: OnePager,
+        faq: Faq,
         result: RunResult,
         enabled: Settings,
         monkeypatch: pytest.MonkeyPatch,
@@ -292,32 +298,32 @@ class TestSending:
             io.BytesIO(json.dumps({"message": "The tencapital.group domain is not verified."}).encode()),
         )
         self._stub(monkeypatch, error=error)
-        outcome = send(one_pager, result, enabled)
+        outcome = send(faq, result, enabled)
         assert outcome.sent is False
         assert "not verified" in outcome.detail
         assert SECRET not in outcome.detail
 
     def test_an_unreachable_service_is_reported_not_raised(
         self,
-        one_pager: OnePager,
+        faq: Faq,
         result: RunResult,
         enabled: Settings,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         self._stub(monkeypatch, error=urllib.error.URLError("no route to host"))
-        outcome = send(one_pager, result, enabled)
+        outcome = send(faq, result, enabled)
         assert outcome.sent is False
         assert "Could not reach Resend" in outcome.detail
 
     def test_a_timeout_is_reported_not_raised(
         self,
-        one_pager: OnePager,
+        faq: Faq,
         result: RunResult,
         enabled: Settings,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         self._stub(monkeypatch, error=TimeoutError("timed out"))
-        assert send(one_pager, result, enabled).sent is False
+        assert send(faq, result, enabled).sent is False
 
 
 class TestNeverFailsTheRun:
@@ -341,7 +347,7 @@ class TestNeverFailsTheRun:
         monkeypatch.setattr(mailer, "send", explode)
 
         payload = json_lib.loads(
-            (FIXTURES / "sample_onepager.json").read_text(encoding="utf-8")
+            (FIXTURES / "sample_faq.json").read_text(encoding="utf-8")
         )
         payload.pop("provenance")
 
@@ -377,7 +383,7 @@ class TestNeverFailsTheRun:
             lambda *_a, **_k: (_ for _ in ()).throw(urllib.error.URLError("down")),
         )
         payload = json_lib.loads(
-            (FIXTURES / "sample_onepager.json").read_text(encoding="utf-8")
+            (FIXTURES / "sample_faq.json").read_text(encoding="utf-8")
         )
         payload.pop("provenance")
 

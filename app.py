@@ -1,6 +1,6 @@
 """deckpager web app.
 
-Upload a deck, get the one-pager. Shaped for Railway: FastAPI + uvicorn, background jobs,
+Upload a deck, get the FAQ. Shaped for Railway: FastAPI + uvicorn, background jobs,
 a TTL sweep, and a concurrency cap.
 
 A run takes minutes, not seconds — a 30-slide deck took 101s against Opus 5 at effort high.
@@ -47,7 +47,6 @@ from deckpager.config import load_settings
 from deckpager.errors import DeckpagerError
 from deckpager.ingest.router import SUPPORTED_SUFFIXES
 from deckpager.models import DEFAULT_MIN_CONFIDENCE
-from deckpager.render.onepager import RENDERED_FIELDS
 
 APP_USERNAME = os.getenv("APP_USERNAME", "ten")
 APP_PASSWORD = os.getenv("APP_PASSWORD", "")
@@ -176,16 +175,16 @@ def healthz() -> dict[str, Any]:
     }
 
 
-def _facts(one_pager: Any) -> list[tuple[str, str | None]]:
-    """The ask, for the result panel. The same five cells the PDF ask strip carries."""
-    from deckpager.render.onepager import money
+def _facts(faq: Any) -> list[tuple[str, str | None]]:
+    """The result panel: how much of the FAQ the document could actually answer."""
+    from deckpager.questions import QUESTION_COUNT
 
+    answered = faq.answered_count()
     return [
-        ("Raise", money(one_pager.raise_amount_usd.value)),
-        ("Pre-money", money(one_pager.pre_money_valuation_usd.value)),
-        ("Committed", money(one_pager.amount_committed_usd.value)),
-        ("Stage", one_pager.stage.value),
-        ("Close", one_pager.close_date.value),
+        ("Answered", f"{answered} of {QUESTION_COUNT}"),
+        ("Unanswered", str(QUESTION_COUNT - answered)),
+        ("Sector", faq.sector.value),
+        ("Stage", faq.stage.value),
     ]
 
 def _run_job(job: Job, deck_path: Path, paper: str, min_confidence: float) -> None:
@@ -201,28 +200,28 @@ def _run_job(job: Job, deck_path: Path, paper: str, min_confidence: float) -> No
         result = run(
             deck_path,
             settings=settings,
-            out_pdf=job.directory / "onepager.pdf",
-            out_json=job.directory / "onepager.json",
+            out_pdf=job.directory / "faq.pdf",
+            out_json=job.directory / "faq.json",
             paper=paper,  # type: ignore[arg-type]
             min_confidence=min_confidence,
             on_stage=set_stage,
         )
 
-        one_pager = result.one_pager
-        job.company = one_pager.company_name.value
-        job.tagline = one_pager.tagline.value
+        faq = result.faq
+        job.company = faq.company_name.value
+        job.tagline = faq.tagline.value
         job.summary = result.summary
         job.flagged = [
             name
-            for name in one_pager.low_confidence_fields(min_confidence)
-            if name in set(RENDERED_FIELDS)
+            for name in faq.low_confidence_fields(min_confidence)
+
         ]
         job.truncations = list(result.truncations)
-        job.warnings = list(one_pager.provenance.ingest_warnings) + list(
-            one_pager.provenance.citation_warnings
+        job.warnings = list(faq.provenance.ingest_warnings) + list(
+            faq.provenance.citation_warnings
         )
-        job.is_pitch_deck = one_pager.is_pitch_deck
-        job.facts = _facts(one_pager)
+        job.is_pitch_deck = faq.is_pitch_deck
+        job.facts = _facts(faq)
         if result.email is not None:
             job.emailed = result.email.detail
             job.emailed_ok = result.email.sent
@@ -304,13 +303,13 @@ def job_status(job_id: str) -> dict[str, Any]:
 
 @app.get("/api/jobs/{job_id}/{artifact}", dependencies=[Depends(require_auth)])
 def download(job_id: str, artifact: str) -> FileResponse:
-    """Download the one-pager PDF or the extraction JSON."""
+    """Download the FAQ PDF or the extraction JSON."""
     if (job := JOBS.get(job_id)) is None:
         raise HTTPException(status_code=404, detail="No such job — it may have expired.")
     if job.stage != "done":
         raise HTTPException(status_code=409, detail=f"Job is {job.stage}, not done.")
 
-    names = {"pdf": "onepager.pdf", "json": "onepager.json"}
+    names = {"pdf": "faq.pdf", "json": "faq.json"}
     if artifact not in names:
         raise HTTPException(status_code=404, detail="Ask for 'pdf' or 'json'.")
 
@@ -322,7 +321,7 @@ def download(job_id: str, artifact: str) -> FileResponse:
     return FileResponse(
         path,
         media_type="application/pdf" if artifact == "pdf" else "application/json",
-        filename=f"{stem}-onepager.{artifact}",
+        filename=f"{stem}-FAQ.{artifact}",
     )
 
 
@@ -339,7 +338,7 @@ def index() -> str:
     accept = sorted(SUPPORTED_SUFFIXES)
     settings = load_settings()
     disclosure = (
-        f"A copy of every generated one-pager is emailed to "
+        f"A copy of every generated FAQ is emailed to "
         f"<code>{settings.report_email_to}</code>."
         if settings.email_enabled
         else "Nothing is emailed: no Resend key is configured on this deployment."

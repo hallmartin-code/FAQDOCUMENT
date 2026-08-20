@@ -113,9 +113,9 @@ def check_email(settings: Settings) -> CheckResult:
 
 def check_reportlab() -> CheckResult:
     """The default render engine. Pure Python, so this is an import check."""
-    from deckpager.render import OnePagerRenderer
+    from deckpager.render import FaqRenderer
 
-    problems = OnePagerRenderer().preflight()
+    problems = FaqRenderer().preflight()
     if problems:
         return CheckResult(
             "render engine: reportlab",

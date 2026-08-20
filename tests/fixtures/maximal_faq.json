@@ -1,0 +1,355 @@
+{
+  "company_name": {
+    "value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "confidence": 1.0,
+    "source_slides": [
+      1
+    ],
+    "note": null
+  },
+  "tagline": {
+    "value": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+    "confidence": 1.0,
+    "source_slides": [
+      1
+    ],
+    "note": null
+  },
+  "sector": {
+    "value": "Biotechnology \u2014 cardiovascular",
+    "confidence": 0.9,
+    "source_slides": [
+      1
+    ],
+    "note": null
+  },
+  "stage": {
+    "value": "Seed",
+    "confidence": 0.8,
+    "source_slides": [
+      17
+    ],
+    "note": null
+  },
+  "not_a_pitch_deck_reason": {
+    "value": null,
+    "confidence": 0.0,
+    "source_slides": [],
+    "note": null
+  },
+  "entries": [
+    {
+      "question_id": "positioning-what",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "positioning-why-now",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "problem-size",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "problem-status-quo",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "solution-what",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "solution-evidence",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "team-who",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "team-gaps",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "market-size",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "market-model",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "diff-competition",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "diff-moat",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "traction-todate",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "traction-validation",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "risk-primary",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "risk-unaddressed",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "deal-ask",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "deal-use",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "commit-founder",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "commit-exit",
+      "answer": {
+        "value": "The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came from, repeated until the limit. The deck states this at the maximum length the schema permits, with figures, caveats, and a citation of the slide it came ",
+        "confidence": 0.5,
+        "source_slides": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "note": null
+      }
+    }
+  ],
+  "provenance": {
+    "source_filename": "maximal_deck.pdf",
+    "source_page_count": 19,
+    "extracted_at": "2026-01-15T12:00:00+00:00",
+    "model": "claude-opus-5",
+    "input_tokens": 41200,
+    "output_tokens": 5100,
+    "estimated_cost_usd": 0.33,
+    "cached": false,
+    "ingest_warnings": [],
+    "citation_warnings": [],
+    "truncations": []
+  }
+}

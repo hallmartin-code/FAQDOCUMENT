@@ -27,34 +27,36 @@ from deckpager.extract.client import (
     estimate_cost,
     parse_tool_payload,
 )
-from deckpager.extract.pipeline import cache_options, cost_line, extract_one_pager
+from deckpager.extract.pipeline import cache_options, cost_line, extract_faq
 from deckpager.extract.prompts import SYSTEM_PROMPT, TOOL_NAME, build_user_blocks, slide_text
 from deckpager.ingest import ingest_deck
-from deckpager.models import NOT_A_DECK, OnePagerDraft
+from deckpager.models import NOT_A_DECK, FaqDraft
+from deckpager.questions import QUESTION_IDS
 
+def _entry(question_id: str, answer: str | None, confidence: float = 0.9) -> dict[str, Any]:
+    return {
+        "question_id": question_id,
+        "answer": {
+            "value": answer,
+            "confidence": 0.0 if answer is None else confidence,
+            "source_slides": [] if answer is None else [1],
+            "note": None,
+        },
+    }
+
+
+#: A payload the schema accepts: all twenty ids, exactly once.
 GOOD_PAYLOAD: dict[str, Any] = {
     "company_name": {"value": "Helion Bio", "confidence": 0.98, "source_slides": [1]},
-    "problem": {
-        "value": "Checkpoint inhibitors fail in 80% of solid tumor patients.",
-        "confidence": 0.9,
-        "source_slides": [2],
-    },
-    "key_strengths": {
-        "value": ["Oral dosing, no cold chain", "Two prior INDs led by the CEO", "UCSD ties"],
-        "confidence": 0.7,
-        "source_slides": [3, 4],
-    },
-    "key_risks": {
-        "value": ["No human data yet", "Commercial lead seat is open", "No lead investor"],
-        "confidence": 0.8,
-        "source_slides": [4, 5],
-    },
+    "entries": [
+        _entry(qid, f"The deck addresses {qid} on slide 1.") for qid in QUESTION_IDS
+    ],
 }
 
-#: Rejected by the schema: spec §6 wants exactly three risks.
+#: Rejected by the schema: a fixed question set is worthless if a question can be dropped.
 BAD_PAYLOAD: dict[str, Any] = {
     "company_name": {"value": "Helion Bio", "confidence": 0.98, "source_slides": [1]},
-    "key_risks": {"value": ["Only one risk"], "confidence": 0.8, "source_slides": [4]},
+    "entries": [_entry(qid, "Answered.") for qid in QUESTION_IDS[:19]],
 }
 
 
@@ -137,7 +139,7 @@ class TestToolContract:
     def test_the_schema_is_generated_from_the_model(self) -> None:
         tool = build_tool()
         assert tool["name"] == TOOL_NAME
-        assert set(tool["input_schema"]["properties"]) == set(OnePagerDraft.model_fields)
+        assert set(tool["input_schema"]["properties"]) == set(FaqDraft.model_fields)
 
     def test_the_tool_call_is_forced_and_single(
         self, settings: Settings, sample_pdf: Path
@@ -186,7 +188,7 @@ class TestCorrectionRetry:
         assert client.call_count == 2
         assert result.draft.company_name.value == "Helion Bio"
         assert len(announced) == 1
-        assert "key_risks" in announced[0]
+        assert "entries" in announced[0]
 
     def test_the_retry_hands_the_errors_back_as_a_tool_result(
         self, settings: Settings, sample_pdf: Path
@@ -247,7 +249,7 @@ class TestApiFailures:
     ) -> None:
         client = StubClient(text_response())
         deck = ingest_deck(sample_pdf, settings)
-        with pytest.raises(AnalysisError, match="no `submit_one_pager` tool call"):
+        with pytest.raises(AnalysisError, match="no `submit_faq` tool call"):
             _extractor(client, settings).extract(deck)
 
     def test_the_sdk_is_configured_for_four_attempts(self, settings: Settings) -> None:
@@ -364,29 +366,29 @@ class TestPipelineAndCache:
     def test_the_result_carries_its_provenance(
         self, settings: Settings, sample_pdf: Path, tmp_path: Path
     ) -> None:
-        one_pager = extract_one_pager(
+        faq = extract_faq(
             sample_pdf,
             settings=settings,
             extractor=FakeExtractor(GOOD_PAYLOAD),
             cache=ExtractionCache(tmp_path),
         )
-        assert one_pager.provenance.source_filename == sample_pdf.name
-        assert one_pager.provenance.source_page_count == 5
-        assert one_pager.provenance.model == settings.model
-        assert one_pager.provenance.cached is False
+        assert faq.provenance.source_filename == sample_pdf.name
+        assert faq.provenance.source_page_count == 5
+        assert faq.provenance.model == settings.model
+        assert faq.provenance.cached is False
 
     def test_a_second_run_reads_the_cache_instead_of_calling(
         self, settings: Settings, sample_pdf: Path, tmp_path: Path
     ) -> None:
         cache = ExtractionCache(tmp_path)
         first = FakeExtractor(GOOD_PAYLOAD)
-        extract_one_pager(sample_pdf, settings=settings, extractor=first, cache=cache)
+        extract_faq(sample_pdf, settings=settings, extractor=first, cache=cache)
 
         class Forbidden(FakeExtractor):
             def extract(self, deck: Any) -> Any:
                 raise AssertionError("a cache hit must not reach the extractor")
 
-        second = extract_one_pager(
+        second = extract_faq(
             sample_pdf,
             settings=settings,
             extractor=Forbidden(GOOD_PAYLOAD),
@@ -399,11 +401,11 @@ class TestPipelineAndCache:
         self, settings: Settings, sample_pdf: Path, tmp_path: Path
     ) -> None:
         cache = ExtractionCache(tmp_path)
-        extract_one_pager(
+        extract_faq(
             sample_pdf, settings=settings, extractor=FakeExtractor(GOOD_PAYLOAD), cache=cache
         )
         second = FakeExtractor(GOOD_PAYLOAD)
-        extract_one_pager(
+        extract_faq(
             sample_pdf,
             settings=settings,
             extractor=second,
@@ -417,16 +419,16 @@ class TestPipelineAndCache:
     ) -> None:
         """A record written by an older build can pass the version check and still not fit."""
         cache = ExtractionCache(tmp_path)
-        extract_one_pager(
+        extract_faq(
             sample_pdf, settings=settings, extractor=FakeExtractor(GOOD_PAYLOAD), cache=cache
         )
         record = next(tmp_path.glob("*/*.json"))
         broken = json.loads(record.read_text(encoding="utf-8"))
-        broken["payload"]["key_risks"]["value"] = ["only one"]
+        broken["payload"]["entries"] = broken["payload"]["entries"][:19]
         record.write_text(json.dumps(broken), encoding="utf-8")
 
-        with pytest.raises(Exception, match="key_risks"):
-            extract_one_pager(
+        with pytest.raises(Exception, match="entries"):
+            extract_faq(
                 sample_pdf,
                 settings=settings,
                 extractor=FakeExtractor(GOOD_PAYLOAD),
@@ -444,10 +446,10 @@ class TestPipelineAndCache:
         self, settings: Settings, sample_pdf: Path, tmp_path: Path
     ) -> None:
         cache = ExtractionCache(tmp_path)
-        extract_one_pager(
+        extract_faq(
             sample_pdf, settings=settings, extractor=FakeExtractor(GOOD_PAYLOAD), cache=cache
         )
-        hit = extract_one_pager(
+        hit = extract_faq(
             sample_pdf, settings=settings, extractor=FakeExtractor(GOOD_PAYLOAD), cache=cache
         )
         assert "no tokens spent" in cost_line(hit, 0.2)
@@ -455,11 +457,14 @@ class TestPipelineAndCache:
     def test_a_document_that_is_not_a_deck_is_flagged(
         self, settings: Settings, sample_pdf: Path, tmp_path: Path
     ) -> None:
-        payload = {"missing_information": {"value": [NOT_A_DECK], "confidence": 1.0}}
-        one_pager = extract_one_pager(
+        payload = {
+            "not_a_pitch_deck_reason": {"value": NOT_A_DECK, "confidence": 1.0},
+            "entries": [_entry(qid, None) for qid in QUESTION_IDS],
+        }
+        faq = extract_faq(
             sample_pdf,
             settings=settings,
             extractor=FakeExtractor(payload),
             cache=ExtractionCache(tmp_path),
         )
-        assert not one_pager.is_pitch_deck
+        assert not faq.is_pitch_deck

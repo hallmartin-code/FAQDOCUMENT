@@ -19,12 +19,11 @@ from deckpager.cache import ExtractionCache
 from deckpager.config import Settings
 from deckpager.errors import EXIT_BAD_INPUT, DeckpagerError, IngestError, RenderError
 from deckpager.extract.client import Extractor
-from deckpager.extract.pipeline import cost_line, extract_one_pager
+from deckpager.extract.pipeline import cost_line, extract_faq
 from deckpager.ingest.router import SUPPORTED_SUFFIXES
 from deckpager.mailer import EmailOutcome
-from deckpager.models import DEFAULT_MIN_CONFIDENCE, OnePager
-from deckpager.render.base import Paper, Renderer, get_engine
-from deckpager.render.onepager import fit_and_render
+from deckpager.models import DEFAULT_MIN_CONFIDENCE, Faq
+from deckpager.render.base import Paper, Renderer, default_engine, get_engine
 
 #: Called with a short stage name as each stage begins.
 StageHook = Callable[[str], None]
@@ -34,7 +33,7 @@ StageHook = Callable[[str], None]
 class RunResult:
     """Everything a caller needs to report on a finished run."""
 
-    one_pager: OnePager
+    faq: Faq
     pdf: Path
     json: Path
     seconds: float = 0.0
@@ -44,18 +43,18 @@ class RunResult:
     @property
     def summary(self) -> str:
         """The spec §10 success line."""
-        return cost_line(self.one_pager, self.seconds)
+        return cost_line(self.faq, self.seconds)
 
 
-def default_stem(deck_path: Path, one_pager: OnePager) -> str:
-    """`{CompanyName}-onepager`, falling back to the deck's own name.
+def default_stem(deck_path: Path, faq: Faq) -> str:
+    """`{CompanyName}-FAQ`, falling back to the deck's own name.
 
     Named for the company rather than the upload, because the file lands in a folder of
-    other companies' one-pagers, and `deck-onepager.pdf` is not findable there.
+    other companies' FAQs, and `deck-FAQ.pdf` is not findable there.
     """
-    name = one_pager.company_name.value or deck_path.stem
+    name = faq.company_name.value or deck_path.stem
     cleaned = "".join(ch if ch.isalnum() or ch in " -_" else "" for ch in name).strip()
-    return f"{cleaned.replace(' ', '_') or deck_path.stem}-onepager"
+    return f"{cleaned.replace(' ', '_') or deck_path.stem}-FAQ"
 
 
 #: Guards the filename reservation below. A batch runs several decks at once, and two
@@ -115,7 +114,7 @@ def run(
     started = time.monotonic()
     stage = on_stage or (lambda _name: None)
 
-    one_pager = extract_one_pager(
+    faq = extract_faq(
         deck_path,
         settings=settings,
         extractor=extractor,
@@ -128,29 +127,32 @@ def run(
 
     stage("rendering")
     directory = out_dir or deck_path.parent
-    stem = default_stem(deck_path, one_pager)
+    stem = default_stem(deck_path, faq)
     if unique_names:
         stem = reserve_stem(directory, stem, deck_path)
     pdf_path = out_pdf or directory / f"{stem}.pdf"
     json_path = out_json or directory / f"{stem}.json"
 
-    renderer = get_engine(engine) if isinstance(engine, str) else engine
-    pdf_path, truncations = fit_and_render(
-        one_pager,
+    # `None` means the default engine. fit_and_render used to resolve this; calling
+    # renderer.render directly means the default has to be resolved here instead.
+    if isinstance(engine, str):
+        renderer = get_engine(engine)
+    else:
+        renderer = engine or default_engine()
+    # No fitting ladder: the FAQ paginates, so no answer is ever shortened to fit.
+    # `truncations` stays in the result shape because callers and the web UI read it.
+    truncations: list[str] = []
+    pdf_path = renderer.render(
+        faq,
         pdf_path,
         paper=paper,
         threshold=min_confidence,
-        renderer=renderer,
     )
-
-    # Recorded on the document, not only returned: someone reading the JSON months later
-    # needs to know the page they were handed was shortened, and by what.
-    one_pager.provenance.truncations = list(truncations)
     json_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(one_pager.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    json_path.write_text(faq.model_dump_json(indent=2) + "\n", encoding="utf-8")
 
     result = RunResult(
-        one_pager=one_pager,
+        faq=faq,
         pdf=pdf_path,
         json=json_path,
         seconds=time.monotonic() - started,
@@ -165,7 +167,7 @@ def run(
         stage("emailing")
         try:
             result.email = mailer.send(
-                one_pager, result, settings, threshold=min_confidence
+                faq, result, settings, threshold=min_confidence
             )
         except Exception as exc:  # noqa: BLE001 - see below
             # mailer.send promises never to raise, and a promise is not a guarantee: a
@@ -210,7 +212,7 @@ class BatchReport:
     def cost_usd(self) -> float:
         """What the batch actually spent. A cache hit contributes nothing."""
         return sum(
-            e.result.one_pager.provenance.estimated_cost_usd or 0.0
+            e.result.faq.provenance.estimated_cost_usd or 0.0
             for e in self.succeeded
             if e.result is not None
         )

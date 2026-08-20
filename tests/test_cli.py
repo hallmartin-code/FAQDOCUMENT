@@ -97,10 +97,10 @@ class TestSchemaCommand:
     def test_matches_the_model_it_is_generated_from(self) -> None:
         import json
 
-        from deckpager.models import OnePagerDraft
+        from deckpager.models import FaqDraft
 
         schema = json.loads(runner.invoke(app, ["schema"]).output)
-        assert set(schema["properties"]) == set(OnePagerDraft.model_fields)
+        assert set(schema["properties"]) == set(FaqDraft.model_fields)
 
     def test_zero_indent_prints_one_line(self) -> None:
         result = runner.invoke(app, ["schema", "--indent", "0"])

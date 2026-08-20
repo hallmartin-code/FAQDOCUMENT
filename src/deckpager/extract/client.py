@@ -32,7 +32,7 @@ from deckpager.extract.prompts import (
     system_blocks,
 )
 from deckpager.ingest.models import Deck
-from deckpager.models import OnePagerDraft, tool_schema
+from deckpager.models import FaqDraft, tool_schema
 
 #: Spec §8: four attempts on 429/5xx. The SDK owns the backoff, which is exponential with
 #: jitter and honours a Retry-After header — better behaviour than a hand-rolled loop, and
@@ -75,7 +75,7 @@ class Usage:
 class Extraction:
     """A validated draft and what it took to get it."""
 
-    draft: OnePagerDraft
+    draft: FaqDraft
     usage: Usage = field(default_factory=Usage)
 
 
@@ -203,7 +203,7 @@ class AnthropicExtractor:
         input_tokens = attempt.input_tokens + (previous.input_tokens if previous else 0)
         output_tokens = attempt.output_tokens + (previous.output_tokens if previous else 0)
         return Extraction(
-            draft=OnePagerDraft.model_validate(attempt.payload),
+            draft=FaqDraft.model_validate(attempt.payload),
             usage=Usage(
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
@@ -218,7 +218,7 @@ class AnthropicExtractor:
         if attempt.payload is None:
             return attempt.error
         try:
-            OnePagerDraft.model_validate(attempt.payload)
+            FaqDraft.model_validate(attempt.payload)
         except ValidationError as exc:
             return format_validation_errors(exc)
         return None
@@ -238,7 +238,7 @@ class AnthropicExtractor:
                 messages=messages,  # type: ignore[arg-type]
                 tools=[build_tool()],  # type: ignore[list-item]
                 # disable_parallel_tool_use is load-bearing: without it the model can emit
-                # several parallel submit_one_pager blocks, splicing partial JSON objects
+                # several parallel submit_faq blocks, splicing partial JSON objects
                 # together into an unparseable payload.
                 tool_choice={
                     "type": "tool",
@@ -311,11 +311,11 @@ class AnthropicExtractor:
 class FakeExtractor:
     """Replays a recorded payload. Used by the test suite; never touches the network."""
 
-    def __init__(self, payload: dict[str, Any] | OnePagerDraft) -> None:
+    def __init__(self, payload: dict[str, Any] | FaqDraft) -> None:
         self._draft = (
             payload
-            if isinstance(payload, OnePagerDraft)
-            else OnePagerDraft.model_validate(payload)
+            if isinstance(payload, FaqDraft)
+            else FaqDraft.model_validate(payload)
         )
         self.calls: list[Deck] = []
 

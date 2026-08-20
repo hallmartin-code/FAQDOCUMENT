@@ -1,4 +1,4 @@
-"""Rendering: the engine contract, the ReportLab engine, and the fitting ladder."""
+"""Rendering: the engine contract and the ReportLab FAQ engine."""
 
 from __future__ import annotations
 
@@ -10,16 +10,15 @@ from deckpager.render.base import (
     default_engine,
     get_engine,
 )
-from deckpager.render.onepager import OnePagerRenderer, PageLayout, fit_and_render
+from deckpager.render.faq import FaqRenderer, render_faq
 
 __all__ = [
     "ENGINE_NAMES",
     "EngineName",
-    "OnePagerRenderer",
-    "PageLayout",
+    "FaqRenderer",
     "Paper",
     "Renderer",
     "default_engine",
-    "fit_and_render",
     "get_engine",
+    "render_faq",
 ]

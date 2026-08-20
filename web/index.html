@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>TEN Capital Network — Deck to One-Pager</title>
+<title>TEN Capital Network — Deck to Investor FAQ</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='20' r='14' fill='%23F3A22A'/%3E%3Ccircle cx='78' cy='68' r='14' fill='%2335BEBB'/%3E%3Ccircle cx='22' cy='68' r='14' fill='%23EE5A4E'/%3E%3C/svg%3E">
 <meta name="theme-color" content="#0B1526">
-<meta name="description" content="Upload a pitch deck and get a single-page investor one-pager, analyzed and structured by Claude.">
-<meta property="og:title" content="TEN Capital Network - Deck to One-Pager">
+<meta name="description" content="Upload a pitch deck and get a twenty-question investor FAQ, analyzed and structured by Claude.">
+<meta property="og:title" content="TEN Capital Network - Deck to Investor FAQ">
 <meta property="og:description" content="Upload a pitch deck and get a single-page investor one-pager, analyzed and structured by Claude.">
 <meta property="og:type" content="website">
 
@@ -494,8 +494,8 @@
   <!-- Upload -->
   <div class="card" id="uploadCard">
     <div class="eyebrow">Deck Analyzer</div>
-    <h1>Pitch Deck<span class="arrow">&rarr;</span><span class="to">Investor One&#8209;Pager</span></h1>
-    <p class="lede">Upload a pitch deck and get a polished single-page investor PDF, analyzed and structured by Claude. Every figure on the page carries the slide it came from.</p>
+    <h1>Pitch Deck<span class="arrow">&rarr;</span><span class="to">Investor FAQ</span></h1>
+    <p class="lede">Upload a pitch deck and get the twenty TEN Capital diligence questions answered from it, analyzed and structured by Claude. Every answer carries the slide it came from, and a question the deck cannot answer says so.</p>
 
     <form id="form">
       <label class="dropzone" id="drop" for="deck-upload">
@@ -522,7 +522,7 @@
         </label>
       </div>
 
-      <button class="cta" type="submit" id="go" disabled>Generate one-pager PDF</button>
+      <button class="cta" type="submit" id="go" disabled>Generate investor FAQ</button>
     </form>
 
     <div class="disclosure">
@@ -567,7 +567,7 @@ const STAGES = {
   extracting: ["Analyzing",            "Claude is reading the deck",             55],
   cached:     ["Analyzing",            "Found this deck in the cache",           88],
   rendering:  ["Laying out",           "Fitting everything onto one page",       90],
-  emailing:   ["Sending",              "Emailing the one-pager",                 96],
+  emailing:   ["Sending",              "Emailing the FAQ",                        96],
   done:       ["Complete",             "",                                       100],
   failed:     ["Failed",               "",                                       100],
 };
@@ -654,7 +654,7 @@ function paint(job){
 
   if (job.stage === "failed"){
     $("resultEyebrow").textContent = "Failed";
-    $("resultHead").textContent = "Could not produce a one-pager";
+    $("resultHead").textContent = "Could not produce an FAQ";
     $("resultSub").textContent = "";
     announce("Failed. " + (job.error || "Unknown error"));
     note(job.error || "Unknown error", "warn");
@@ -665,7 +665,7 @@ function paint(job){
   $("resultEyebrow").textContent = "Complete";
   $("resultHead").textContent = job.company || job.filename;
   $("resultSub").textContent = job.tagline || "";
-  announce("Complete. One-pager ready for " + (job.company || job.filename) + ". Download links follow.");
+  announce("Complete. FAQ ready for " + (job.company || job.filename) + ". Download links follow.");
 
   if (job.facts && job.facts.length){
     job.facts.forEach(([label, value]) => fact(label, value));

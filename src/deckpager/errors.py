@@ -55,7 +55,7 @@ class AnalysisError(DeckpagerError):
 
 
 class SchemaValidationError(AnalysisError):
-    """The model's tool payload did not validate against the OnePager schema.
+    """The model's tool payload did not validate against the FAQ schema.
 
     Shares the extraction exit code: from the shell's point of view the extraction is what
     failed, and the correction retry has already been spent by the time this escapes.
@@ -66,16 +66,5 @@ class SchemaValidationError(AnalysisError):
 
 class RenderError(DeckpagerError):
     """A renderer could not produce its output."""
-
-    exit_code = EXIT_RENDER_FAILED
-
-
-class OnePagerOverflowError(RenderError):
-    """The one-pager could not be fitted onto one page.
-
-    Distinct from RenderError because it is not an engine failure — the document rendered
-    fine, it was just too long. Emitting page 2 would be the silent failure this exists to
-    prevent, so the run fails loudly instead.
-    """
 
     exit_code = EXIT_RENDER_FAILED

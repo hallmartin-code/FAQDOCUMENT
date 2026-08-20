@@ -58,20 +58,19 @@ def stub_run(monkeypatch: pytest.MonkeyPatch, module: Any, **overrides: Any) -> 
         pdf.parent.mkdir(parents=True, exist_ok=True)
         pdf.write_bytes(b"%PDF-1.4 pretend")
         js.write_text(json_lib.dumps({"company_name": {"value": "Helion Bio"}}), encoding="utf-8")
-        one_pager = SimpleNamespace(
+        # The result panel reads coverage now, not the ask strip.
+        faq = SimpleNamespace(
             company_name=SimpleNamespace(value=overrides.get("company", "Helion Bio")),
             tagline=SimpleNamespace(value="Reprogramming macrophages"),
-            raise_amount_usd=SimpleNamespace(value=4_000_000),
-            pre_money_valuation_usd=SimpleNamespace(value=16_000_000),
-            amount_committed_usd=SimpleNamespace(value=1_100_000),
+            sector=SimpleNamespace(value="Biotechnology"),
             stage=SimpleNamespace(value="Seed"),
-            close_date=SimpleNamespace(value="Q3 2026"),
-            low_confidence_fields=lambda _t: overrides.get("flagged", ["website"]),
+            answered_count=lambda: overrides.get("answered", 18),
+            low_confidence_fields=lambda _t: overrides.get("flagged", ["market-size"]),
             is_pitch_deck=overrides.get("is_pitch_deck", True),
             provenance=SimpleNamespace(ingest_warnings=[], citation_warnings=[]),
         )
         return SimpleNamespace(
-            one_pager=one_pager,
+            faq=faq,
             pdf=pdf,
             json=js,
             truncations=overrides.get("truncations", []),
@@ -179,12 +178,12 @@ class TestJobLifecycle:
     def test_the_download_is_named_for_the_company(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """It lands in a folder of other companies' one-pagers."""
+        """It lands in a folder of other companies' FAQs."""
         stub_run(monkeypatch, client.module)  # type: ignore[attr-defined]
         job_id = upload(client).json()["id"]
         wait_for_done(client, job_id)
         disposition = client.get(f"/api/jobs/{job_id}/pdf").headers["content-disposition"]
-        assert "Helion_Bio-onepager.pdf" in disposition
+        assert "Helion_Bio-FAQ.pdf" in disposition
 
     def test_the_uploaded_deck_is_deleted_once_it_has_been_read(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
@@ -273,15 +272,16 @@ class TestEmailReporting:
         assert "403" in payload["emailed"]
         assert client.get(f"/api/jobs/{job_id}/pdf").status_code == 200
 
-    def test_the_ask_reaches_the_result_panel(
+    def test_coverage_reaches_the_result_panel(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The panel shows the same five cells as the PDF ask strip."""
+        """The panel answers the first question a partner asks: how much did the deck
+        actually address?"""
         stub_run(monkeypatch, client.module)  # type: ignore[attr-defined]
         payload = wait_for_done(client, upload(client).json()["id"])
         labels = [label for label, _ in payload["facts"]]
-        assert labels == ["Raise", "Pre-money", "Committed", "Stage", "Close"]
-        assert [v for _, v in payload["facts"]] == ["$4M", "$16M", "$1.1M", "Seed", "Q3 2026"]
+        assert labels == ["Answered", "Unanswered", "Sector", "Stage"]
+        assert [v for _, v in payload["facts"]] == ["18 of 20", "2", "Biotechnology", "Seed"]
 
 class TestLeakage:
     def test_the_job_payload_carries_no_path_and_no_key(

@@ -1,3 +1,10 @@
+> **Superseded, 20 Aug 2026.** This spec describes the one-page investor summary the
+> project started as. The output is now a **twenty-question investor FAQ** — see
+> `templates/faq.md` for the current document contract and `src/deckpager/questions.py`
+> for the questions. The ingestion, extraction, caching, error-handling, and deployment
+> halves of this spec are unchanged and still authoritative; §6 (data model) and §9
+> (layout) are not.
+
 # Build Prompt — Pitch Deck → TEN Capital Investor One-Pager (Python)
 
 ## 1. Role

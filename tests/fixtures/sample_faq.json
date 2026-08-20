@@ -1,0 +1,282 @@
+{
+  "company_name": {
+    "value": "Helion Bio",
+    "confidence": 1.0,
+    "source_slides": [
+      1
+    ],
+    "note": null
+  },
+  "tagline": {
+    "value": "Oral therapy for treatment-resistant hypertension.",
+    "confidence": 0.95,
+    "source_slides": [
+      1
+    ],
+    "note": null
+  },
+  "sector": {
+    "value": "Biotechnology \u2014 cardiovascular",
+    "confidence": 0.9,
+    "source_slides": [
+      1
+    ],
+    "note": null
+  },
+  "stage": {
+    "value": "Seed",
+    "confidence": 0.8,
+    "source_slides": [
+      17
+    ],
+    "note": null
+  },
+  "not_a_pitch_deck_reason": {
+    "value": null,
+    "confidence": 0.0,
+    "source_slides": [],
+    "note": null
+  },
+  "entries": [
+    {
+      "question_id": "positioning-what",
+      "answer": {
+        "value": "Helion Bio is developing an oral small-molecule therapy for treatment-resistant hypertension. The deck describes a once-daily tablet targeting a renal sodium channel, positioned as an add-on to standard therapy rather than a replacement.",
+        "confidence": 0.95,
+        "source_slides": [
+          1,
+          4
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "positioning-why-now",
+      "answer": {
+        "value": "Slide 3 cites the 2025 guideline change lowering the treatment-resistant threshold, which the deck states expands the eligible population by 40%. No source is given for the 40% figure.",
+        "confidence": 0.7,
+        "source_slides": [
+          3
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "problem-size",
+      "answer": {
+        "value": "The deck states 12 million US patients have treatment-resistant hypertension, that 8 million remain uncontrolled on three or more agents, and that uncontrolled hypertension costs the US system $52B a year (slide 2). None of the three figures carries a citation.",
+        "confidence": 0.9,
+        "source_slides": [
+          2
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "problem-status-quo",
+      "answer": {
+        "value": "Current care is escalating combinations of diuretics, ACE inhibitors and calcium channel blockers, described on slide 2 as failing in roughly a third of patients. Payors are named as commercial insurers and Medicare; no cost per patient is given.",
+        "confidence": 0.75,
+        "source_slides": [
+          2,
+          5
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "solution-what",
+      "answer": {
+        "value": "A once-daily oral tablet inhibiting a renal sodium channel, described on slides 4 and 6. The deck states the mechanism is distinct from existing diuretics because it acts distally, and claims this avoids the potassium loss that limits current agents.",
+        "confidence": 0.9,
+        "source_slides": [
+          4,
+          6
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "solution-evidence",
+      "answer": {
+        "value": "Preclinical only. Slide 7 reports a 22 mmHg systolic reduction in a rat model (n=40) over 14 days, and slide 8 states IND-enabling toxicology is complete. No human data is presented anywhere in the deck.",
+        "confidence": 0.95,
+        "source_slides": [
+          7,
+          8
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "team-who",
+      "answer": {
+        "value": "Dr Amara Osei, founder and CSO, is described as the inventor of the compound with 18 years in renal pharmacology (slide 14). The CEO, Jonas Reeve, is listed as part-time until close of the round.",
+        "confidence": 0.85,
+        "source_slides": [
+          14
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "team-gaps",
+      "answer": {
+        "value": "No clinical development lead and no regulatory lead are named, for a company whose next milestone is an IND filing. The deck names a CRO partner but not a manufacturer.",
+        "confidence": 0.6,
+        "source_slides": [
+          14,
+          15
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "market-size",
+      "answer": {
+        "value": "Slide 9 gives a $9.4B TAM and a $2.1B SAM. The TAM is derived from patient count multiplied by an assumed $2,400 annual price; the SAM derivation is not shown.",
+        "confidence": 0.8,
+        "source_slides": [
+          9
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "market-model",
+      "answer": {
+        "value": "Specialty pharmacy distribution at an assumed $2,400 per patient per year (slide 9). The deck models 60% gross margin at scale but does not state COGS.",
+        "confidence": 0.7,
+        "source_slides": [
+          9,
+          10
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "diff-competition",
+      "answer": {
+        "value": "Slide 11 names two competitors \u2014 Vertex Renal and an unnamed Phase 2 asset \u2014 and differentiates on the distal mechanism and once-daily dosing. The comparison is asserted rather than shown against published data.",
+        "confidence": 0.65,
+        "source_slides": [
+          11
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "diff-moat",
+      "answer": {
+        "value": "One composition-of-matter application filed in the US and EU (slide 12), stated as pending rather than granted. Expiry is given as 2044. No method-of-use filings are mentioned.",
+        "confidence": 0.85,
+        "source_slides": [
+          12
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "traction-todate",
+      "answer": {
+        "value": "A $1.1M NIH SBIR Phase I award (slide 13), IND-enabling toxicology complete (slide 8), and the patent filing on slide 12. No revenue, no clinical work.",
+        "confidence": 0.9,
+        "source_slides": [
+          8,
+          12,
+          13
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "traction-validation",
+      "answer": {
+        "value": "The SBIR award is the only third-party validation in the deck. Slide 15 lists two academic advisors but no customers, partners, or committed investors.",
+        "confidence": 0.55,
+        "source_slides": [
+          13,
+          15
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "risk-primary",
+      "answer": {
+        "value": "Slide 16 names clinical risk (no human data), regulatory timing, and financing risk, and states mitigations of an experienced CRO and a staged raise.",
+        "confidence": 0.85,
+        "source_slides": [
+          16
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "risk-unaddressed",
+      "answer": {
+        "value": "The deck does not reconcile the 18-month runway on slide 17 with the 26-month timeline to Phase 1 readout on slide 18 \u2014 a gap of roughly eight months with no stated bridge.",
+        "confidence": 0.8,
+        "source_slides": [
+          17,
+          18
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "deal-ask",
+      "answer": {
+        "value": "Raising $6M on a SAFE with a $24M post-money cap and a 20% discount (slide 17). $1.4M is stated as committed. No lead investor is named.",
+        "confidence": 0.9,
+        "source_slides": [
+          17
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "deal-use",
+      "answer": {
+        "value": "Slide 17 allocates 55% to IND-enabling work and Phase 1, 25% to CMC, and 20% to operations, stating an 18-month runway. The Phase 1 readout on slide 18 sits beyond that runway.",
+        "confidence": 0.85,
+        "source_slides": [
+          17,
+          18
+        ],
+        "note": null
+      }
+    },
+    {
+      "question_id": "commit-founder",
+      "answer": {
+        "value": null,
+        "confidence": 0.0,
+        "source_slides": [],
+        "note": null
+      }
+    },
+    {
+      "question_id": "commit-exit",
+      "answer": {
+        "value": null,
+        "confidence": 0.0,
+        "source_slides": [],
+        "note": null
+      }
+    }
+  ],
+  "provenance": {
+    "source_filename": "helion_bio_seed_deck.pdf",
+    "source_page_count": 19,
+    "extracted_at": "2026-01-15T12:00:00+00:00",
+    "model": "claude-opus-5",
+    "input_tokens": 41200,
+    "output_tokens": 5100,
+    "estimated_cost_usd": 0.33,
+    "cached": false,
+    "ingest_warnings": [],
+    "citation_warnings": [],
+    "truncations": []
+  }
+}

@@ -1,22 +1,23 @@
 # deckpager
 
-Turns a pitch deck into a one-page TEN Capital investor one-pager, with every extracted
-claim traceable to the slide it came from.
+Turns a pitch deck into a TEN Capital investor FAQ: the same twenty diligence questions put
+to every deck, answered from the document, with every answer traceable to the slide it came
+from.
 
-The discipline is the point. Every field carries the slide numbers it came from and how
-confident the model was; anything the deck does not say comes back null and prints as an em
-dash rather than a plausible guess. Fields below the confidence threshold are flagged on the
-page and counted in the footer, so a partner can see at a glance how much of the summary the
-deck actually supports.
+The discipline is the point. The questions are fixed, so two companies are comparable and a
+question the deck cannot answer stays visible instead of being quietly replaced by one it
+can. Every answer carries its slide numbers and a confidence score; a question the document
+does not address prints **"Not addressed in the document."** rather than a plausible guess,
+and every such question is gathered again at the end as the agenda for the founder call.
 
 Outputs, per run:
 
 | File | What it is |
 |---|---|
-| `<Company>-onepager.pdf` | The one-pager. Exactly one page, always — see below. |
-| `<Company>-onepager.json` | The validated extraction: every field, its confidence, its source slides. |
+| `<Company>-FAQ.pdf` | The FAQ. As long as the answers require, typically 3-5 pages. |
+| `<Company>-FAQ.json` | The validated extraction: every answer, its confidence, its source slides. |
 
-The document structure is specified in [`templates/onepager.md`](templates/onepager.md) and
+The document structure is specified in [`templates/faq.md`](templates/faq.md) and
 enforced by `tests/test_template.py`.
 
 ---
@@ -42,8 +43,8 @@ key and no cost. Run it first on an unfamiliar deck.
 ## Commands
 
 ```
-deckpager render DECK   Deck -> one-pager PDF and JSON. The main command.
-    -o, --out PATH          Output PDF (default: <Company>-onepager.pdf beside the deck)
+deckpager render DECK   Deck -> FAQ PDF and JSON. The main command.
+    -o, --out PATH          Output PDF (default: <Company>-FAQ.pdf beside the deck)
         --json PATH         Output JSON path
         --model TEXT        Override the model
         --paper letter|a4
@@ -97,7 +98,7 @@ Opus because a hallucinated valuation reaching a partner costs more than the dif
 ## Batches
 
 ```bash
-deckpager batch ~/inbox --out-dir ~/onepagers --concurrency 3
+deckpager batch ~/inbox --out-dir ~/faqs --concurrency 3
 ```
 
 Analyzes every supported deck directly inside the directory. Not recursively, so the output
@@ -124,7 +125,7 @@ Asking for it reports why — whether the package is missing, its native GTK lib
 missing, or simply that the layout is not implemented — rather than failing with a stack
 trace. Building it would mean a second full layout that cannot be run or tested on a machine
 without GTK, and an unverified second layout drifts from
-[`templates/onepager.md`](templates/onepager.md) without anyone noticing.
+[`templates/faq.md`](templates/faq.md) without anyone noticing.
 
 ---
 
@@ -189,7 +190,7 @@ Two things to know about the deployed environment:
 
 ## Emailing each result
 
-Every generated one-pager can be emailed automatically, with the PDF and the extraction
+Every generated FAQ can be emailed automatically, with the PDF and the extraction
 JSON attached. The body carries the ask, the strengths, the risks, and the diligence
 requests, plus anything the run flagged or truncated — enough to triage from the inbox
 without opening the attachment.
@@ -271,7 +272,7 @@ pytest                    # the full suite
 mypy                      # --strict, clean
 ruff check .
 python tests/fixtures/make_fixtures.py     # regenerate the deck fixtures
-python tests/fixtures/make_onepagers.py    # regenerate the one-pager fixtures
+python tests/fixtures/make_faqs.py    # regenerate the FAQ fixtures
 ```
 
 `DECISIONS.md` records every design decision taken where the build spec was silent, plus the

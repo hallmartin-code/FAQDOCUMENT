@@ -25,8 +25,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from deckpager.config import Settings
-from deckpager.models import DEFAULT_MIN_CONFIDENCE, OnePager
-from deckpager.render.onepager import RENDERED_FIELDS, money
+from deckpager.models import DEFAULT_MIN_CONFIDENCE, Faq
+from deckpager.questions import QUESTION_COUNT
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle only matters to the type checker
     from deckpager.pipeline import RunResult
@@ -70,10 +70,11 @@ def describe(settings: Settings) -> str:
     )
 
 
-def subject_for(one_pager: OnePager) -> str:
-    """`{Company} — TEN Capital one-pager`, or the deck name when the company is unknown."""
-    name = one_pager.company_name.value or Path(one_pager.provenance.source_filename).stem
-    return f"{name} — TEN Capital one-pager"
+def subject_for(faq: Faq) -> str:
+    """`{Company} — TEN Capital investor FAQ`, or the file name when unknown."""
+    name = faq.company_name.value or Path(faq.provenance.source_filename).stem
+    answered = faq.answered_count()
+    return f"{name} - TEN Capital investor FAQ ({answered}/{QUESTION_COUNT} answered)"
 
 
 def _bullets(items: list[str]) -> str:
@@ -83,79 +84,80 @@ def _bullets(items: list[str]) -> str:
     return f"<ul style='margin:0;padding-left:18px'>{rows}</ul>"
 
 
-def _ask_row(one_pager: OnePager) -> str:
+def _coverage_bar(faq: Faq, threshold: float) -> str:
+    """The three numbers that tell a partner whether this deck is worth a meeting."""
+    answered = faq.answered_count()
     cells = [
-        ("Raise", money(one_pager.raise_amount_usd.value)),
-        ("Pre-money", money(one_pager.pre_money_valuation_usd.value)),
-        ("Instrument", one_pager.instrument.value),
-        ("Committed", money(one_pager.amount_committed_usd.value)),
-        ("Close", one_pager.close_date.value),
+        ("Answered", f"{answered} of {QUESTION_COUNT}"),
+        ("Unanswered", str(QUESTION_COUNT - answered)),
+        ("Low confidence", str(len(faq.low_confidence_entries(threshold)))),
     ]
     return "".join(
         f"<td style='padding:8px 12px;border-right:1px solid #d8dce3;vertical-align:top'>"
         f"<div style='font-size:10px;letter-spacing:.06em;color:#6b7280;text-transform:uppercase'>"
         f"{escape(label)}</div>"
-        f"<div style='font-size:14px;color:#14181f;margin-top:2px'>{escape(value or '—')}</div>"
+        f"<div style='font-size:14px;color:#14181f;margin-top:2px'>{escape(value)}</div>"
         f"</td>"
         for label, value in cells
     )
 
 
-def build_html(one_pager: OnePager, result: RunResult, threshold: float) -> str:
-    """The email body: the same shape as the page, so the two are recognisably one thing."""
-    flagged = [
-        name
-        for name in one_pager.low_confidence_fields(threshold)
-        if name in set(RENDERED_FIELDS)
-    ]
-    provenance = one_pager.provenance
+def build_html(faq: Faq, result: RunResult, threshold: float) -> str:
+    """The email body: coverage first, then the questions the document cannot answer.
+
+    A partner reading this on a phone needs two things before deciding whether to open
+    the attachment — how much of the deck actually answered the standard questions, and
+    what they will have to ask the founders. Everything else is in the PDF.
+    """
+    provenance = faq.provenance
+    unanswered = faq.unanswered()
+    flagged = faq.low_confidence_entries(threshold)
+
     caveats: list[str] = []
-    if not one_pager.is_pitch_deck:
+    if not faq.is_pitch_deck:
         caveats.append("This document does not read as a pitch deck.")
     caveats += list(provenance.ingest_warnings) + list(provenance.citation_warnings)
-    caveats += [f"{cut} (to keep it to one page)" for cut in result.truncations]
     if flagged:
         caveats.append(
-            f"{len(flagged)} field(s) below {threshold:.0%} confidence: {', '.join(sorted(flagged))}"
+            f"{len(flagged)} answer(s) below {threshold:.0%} confidence: "
+            + ", ".join(entry.question.text for entry in flagged)
         )
 
-    company = escape(one_pager.company_name.value or "Unnamed company")
-    tagline = escape(one_pager.tagline.value or "")
+    company = escape(faq.company_name.value or "Unnamed company")
+    tagline = escape(faq.tagline.value or "")
+    open_items = (
+        _bullets([question.text for question in unanswered])
+        if unanswered
+        else "<p style='margin:0;color:#6b7280'>None — the document addresses all "
+        f"{QUESTION_COUNT} questions.</p>"
+    )
 
-    return f"""\
-<div style="font:15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#14181f;max-width:640px">
+    return f"""<div style="font:15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#14181f;max-width:640px">
   <div style="border-bottom:2px solid #1f3864;padding-bottom:12px;margin-bottom:18px">
     <div style="font:600 22px/1.2 Georgia,serif">{company}</div>
     <div style="color:#6b7280;font-size:14px;margin-top:4px">{tagline}</div>
+    <div style="color:#6b7280;font-size:12px;margin-top:6px">TEN Capital investor FAQ</div>
   </div>
 
   <table style="width:100%;border-collapse:collapse;background:#eef2f8;border-radius:6px;margin-bottom:20px">
-    <tr>{_ask_row(one_pager)}</tr>
+    <tr>{_coverage_bar(faq, threshold)}</tr>
   </table>
 
-  <div style="display:block;margin-bottom:18px">
-    <div style="font:600 13px/1.3 Georgia,serif;color:#1f3864;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Strengths</div>
-    {_bullets(one_pager.key_strengths.value or [])}
-  </div>
   <div style="margin-bottom:18px">
-    <div style="font:600 13px/1.3 Georgia,serif;color:#1f3864;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Risks</div>
-    {_bullets(one_pager.key_risks.value or [])}
-  </div>
-  <div style="margin-bottom:18px">
-    <div style="font:600 13px/1.3 Georgia,serif;color:#1f3864;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Request from founder</div>
-    {_bullets(one_pager.missing_information.value or [])}
+    <div style="font:600 13px/1.3 Georgia,serif;color:#1f3864;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Ask the founders</div>
+    {open_items}
   </div>
 
   <div style="background:#f6f5f2;border-radius:6px;padding:14px 16px;margin-bottom:18px">
     <div style="font-style:italic;font-size:12px;color:#6b7280;margin-bottom:8px">
-      TEN Capital analysis — AI-generated. Strengths, risks, and requests above are
-      deckpager's judgment, not the deck's claims.
+      TEN Capital analysis — AI-generated. Every answer in the attached FAQ cites the
+      slide or section it came from; answers are not the founders' words unless quoted.
     </div>
-    {_bullets(caveats) if caveats else "<div style='font-size:13px;color:#6b7280'>No caveats: nothing was truncated and nothing was flagged.</div>"}
+    {_bullets(caveats) if caveats else "<div style='font-size:13px;color:#6b7280'>No caveats: nothing was flagged.</div>"}
   </div>
 
   <div style="font-size:12px;color:#6b7280;border-top:1px solid #d8dce3;padding-top:12px">
-    The one-pager PDF is attached.<br>
+    The full FAQ is attached as a PDF.<br>
     Source: {escape(provenance.source_filename)} · {provenance.source_page_count} slides ·
     {escape(provenance.model)} · {escape(result.summary)}<br>
     Generated by TEN Capital · Internal use only.
@@ -163,31 +165,32 @@ def build_html(one_pager: OnePager, result: RunResult, threshold: float) -> str:
 </div>"""
 
 
-def build_text(one_pager: OnePager, result: RunResult) -> str:
+def build_text(faq: Faq, result: RunResult) -> str:
     """A plain-text alternative, for clients that will not render HTML."""
+    answered = faq.answered_count()
     lines = [
-        one_pager.company_name.value or "Unnamed company",
-        one_pager.tagline.value or "",
+        faq.company_name.value or "Unnamed company",
+        faq.tagline.value or "",
         "",
-        f"Raise:      {money(one_pager.raise_amount_usd.value) or '—'}",
-        f"Pre-money:  {money(one_pager.pre_money_valuation_usd.value) or '—'}",
-        f"Instrument: {one_pager.instrument.value or '—'}",
-        f"Committed:  {money(one_pager.amount_committed_usd.value) or '—'}",
-        f"Close:      {one_pager.close_date.value or '—'}",
+        "TEN CAPITAL INVESTOR FAQ",
+        f"  Answered:       {answered} of {QUESTION_COUNT}",
+        f"  Unanswered:     {QUESTION_COUNT - answered}",
         "",
-        "STRENGTHS",
+        "ASK THE FOUNDERS",
     ]
-    lines += [f"  - {item}" for item in one_pager.key_strengths.value or ["—"]]
-    lines += ["", "RISKS"]
-    lines += [f"  - {item}" for item in one_pager.key_risks.value or ["—"]]
-    lines += ["", "REQUEST FROM FOUNDER"]
-    lines += [f"  - {item}" for item in one_pager.missing_information.value or ["—"]]
+    unanswered = faq.unanswered()
+    lines += (
+        [f"  - {question.text}" for question in unanswered]
+        if unanswered
+        else ["  - Nothing: the document addresses all twenty questions."]
+    )
     lines += [
         "",
-        "Strengths, risks, and requests are deckpager's analysis, not the deck's claims.",
+        "Every answer in the attached PDF cites the slide or section it came from.",
+        "Answers are TEN Capital analysis, not the deck's own words unless quoted.",
         "",
-        f"Source: {one_pager.provenance.source_filename} "
-        f"({one_pager.provenance.source_page_count} slides)",
+        f"Source: {faq.provenance.source_filename} "
+        f"({faq.provenance.source_page_count} slides)",
         result.summary,
         "Generated by TEN Capital - internal use only.",
     ]
@@ -209,7 +212,7 @@ def _attachment(path: Path) -> dict[str, str] | None:
 
 
 def build_payload(
-    one_pager: OnePager,
+    faq: Faq,
     result: RunResult,
     settings: Settings,
     threshold: float = DEFAULT_MIN_CONFIDENCE,
@@ -222,15 +225,15 @@ def build_payload(
     return {
         "from": settings.report_email_from,
         "to": [address.strip() for address in settings.report_email_to.split(",") if address.strip()],
-        "subject": subject_for(one_pager),
-        "html": build_html(one_pager, result, threshold),
-        "text": build_text(one_pager, result),
+        "subject": subject_for(faq),
+        "html": build_html(faq, result, threshold),
+        "text": build_text(faq, result),
         "attachments": attachments,
     }
 
 
 def send(
-    one_pager: OnePager,
+    faq: Faq,
     result: RunResult,
     settings: Settings,
     threshold: float = DEFAULT_MIN_CONFIDENCE,
@@ -241,7 +244,7 @@ def send(
     if not settings.report_email_to:
         return EmailOutcome.skipped("no recipient configured; the result was not emailed")
 
-    payload = build_payload(one_pager, result, settings, threshold)
+    payload = build_payload(faq, result, settings, threshold)
     request = urllib.request.Request(  # noqa: S310 - fixed https endpoint, not user input
         RESEND_ENDPOINT,
         data=json.dumps(payload).encode("utf-8"),

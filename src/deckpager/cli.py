@@ -17,7 +17,8 @@ from deckpager.ingest.models import Deck
 from deckpager.models import DEFAULT_MIN_CONFIDENCE
 from deckpager.pipeline import BatchEntry, RunResult
 from deckpager.render.base import get_engine
-from deckpager.render.onepager import PAGE_SIZES, RENDERED_FIELDS, Paper
+from deckpager.render.base import Paper
+from deckpager.render.faq import PAGE_SIZES
 
 # Windows consoles still default to a legacy code page, which turns the em-dashes and
 # arrows in prompts, warnings, and company names into replacement characters — or raises
@@ -38,11 +39,11 @@ err_console = Console(stderr=True)
 
 PaperOpt = Annotated[
     str,
-    typer.Option("--paper", help="Page size for the one-pager: letter or a4."),
+    typer.Option("--paper", help="Page size for the FAQ: letter or a4."),
 ]
 StemOpt = Annotated[
     Path | None,
-    typer.Option("-o", "--out", help="Output stem; _onepager.pdf and _analysis.json are appended."),
+    typer.Option("-o", "--out", help="Output stem; _faq.pdf and _analysis.json are appended."),
 ]
 ContextOpt = Annotated[
     str | None,
@@ -171,12 +172,12 @@ def render(
     ],
     out: Annotated[
         Path | None,
-        typer.Option("-o", "--out", help="Output PDF path. Default: <Company>-onepager.pdf"),
+        typer.Option("-o", "--out", help="Output PDF path. Default: <Company>-faq.pdf"),
     ] = None,
     model: ModelOpt = None,
     json_out: Annotated[
         Path | None,
-        typer.Option("--json", help="Also write the extracted one-pager JSON here."),
+        typer.Option("--json", help="Also write the extracted FAQ JSON here."),
     ] = None,
     no_cache: NoCacheOpt = False,
     paper: PaperOpt = "letter",
@@ -193,7 +194,7 @@ def render(
         typer.Option("-v", "--verbose", help="Show the full traceback on failure."),
     ] = False,
 ) -> None:
-    """Turn a deck into the one-pager PDF and its JSON."""
+    """Turn a deck into the investor FAQ PDF and its JSON."""
     from deckpager.config import load_settings
     from deckpager.ingest import ingest_deck
     from deckpager.pipeline import run
@@ -229,23 +230,18 @@ def render(
 
 def _report(result: RunResult, min_confidence: float) -> None:
     """Everything the operator needs to judge the run, after the files are written."""
-    provenance = result.one_pager.provenance
+    provenance = result.faq.provenance
     for warning in provenance.ingest_warnings + provenance.citation_warnings:
         err_console.print(f"[yellow]warning:[/yellow] {escape(warning)}")
-    for cut in result.truncations:
-        err_console.print(f"[yellow]fitted:[/yellow] {escape(cut)} (to keep it to one page)")
-
-    weak = [
-        name
-        for name in result.one_pager.low_confidence_fields(min_confidence)
-        if name in set(RENDERED_FIELDS)
-    ]
+    # Everything extracted is printed in an FAQ, so nothing needs filtering out of
+    # the flag count the way the one-pager's off-page fields did.
+    weak = result.faq.low_confidence_fields(min_confidence)
     if weak:
         console.print(
             f"[yellow]{len(weak)} field(s) below {min_confidence:.0%} confidence:[/yellow] "
             f"{escape(', '.join(sorted(weak)))}"
         )
-    if not result.one_pager.is_pitch_deck:
+    if not result.faq.is_pitch_deck:
         err_console.print("[yellow]This document does not read as a pitch deck.[/yellow]")
 
     console.print(f"[green]wrote[/green] {result.pdf}")
@@ -264,7 +260,7 @@ def batch(
     ],
     out_dir: Annotated[
         Path,
-        typer.Option("--out-dir", help="Where the one-pagers are written."),
+        typer.Option("--out-dir", help="Where the FAQs are written."),
     ],
     concurrency: Annotated[
         int,
@@ -317,16 +313,16 @@ def batch(
                 "[red]XX[/red]", escape(entry.deck.name), "-", escape(entry.error or "")
             )
             continue
-        one_pager = entry.result.one_pager
+        faq = entry.result.faq
         notes = []
         if entry.result.truncations:
             notes.append(f"{len(entry.result.truncations)} fitted")
-        if not one_pager.is_pitch_deck:
+        if not faq.is_pitch_deck:
             notes.append("not a pitch deck")
         table.add_row(
             "[green]OK[/green]",
             escape(entry.deck.name),
-            escape(one_pager.company_name.value or "-"),
+            escape(faq.company_name.value or "-"),
             escape(", ".join(notes)),
         )
     console.print(table)
@@ -349,7 +345,7 @@ def _announce_batch_entry(entry: BatchEntry) -> None:
     if entry.result is None:
         err_console.print(f"[red]failed[/red] {entry.deck.name}: {escape(entry.error or '')}")
         return
-    company = entry.result.one_pager.company_name.value or entry.deck.stem
+    company = entry.result.faq.company_name.value or entry.deck.stem
     console.print(f"[green]done[/green] {escape(company)} — {entry.result.pdf.name}")
 
 @app.command()
@@ -359,13 +355,13 @@ def extract(
     ],
     json_out: Annotated[
         Path | None,
-        typer.Option("--json", "-o", help="Where to write the one-pager JSON."),
+        typer.Option("--json", "-o", help="Where to write the FAQ JSON."),
     ] = None,
     model: ModelOpt = None,
     no_images: NoImagesOpt = False,
     no_cache: NoCacheOpt = False,
 ) -> None:
-    """Extract a deck to one-pager JSON. No PDF.
+    """Extract a deck to investor-FAQ JSON. No PDF.
 
     Transitional: this is the Phase 3 deliverable, so the extraction can be reviewed
     before a renderer exists to hide it. Phase 5 folds it into `render`.
@@ -373,12 +369,12 @@ def extract(
     import time
 
     from deckpager.config import load_settings
-    from deckpager.extract.pipeline import cost_line, extract_one_pager
+    from deckpager.extract.pipeline import cost_line, extract_faq
 
     started = time.monotonic()
     try:
         settings = load_settings(model=model, no_images=no_images)
-        one_pager = extract_one_pager(
+        faq = extract_faq(
             deck,
             settings=settings,
             use_cache=not no_cache,
@@ -389,30 +385,30 @@ def extract(
         _fail(exc)
         return
 
-    destination = json_out or deck.with_name(f"{deck.stem}-onepager.json")
+    destination = json_out or deck.with_name(f"{deck.stem}-faq.json")
     destination.write_text(
-        one_pager.model_dump_json(indent=2) + "\n", encoding="utf-8"
+        faq.model_dump_json(indent=2) + "\n", encoding="utf-8"
     )
 
-    for warning in one_pager.provenance.ingest_warnings:
+    for warning in faq.provenance.ingest_warnings:
         err_console.print(f"[yellow]warning:[/yellow] {escape(warning)}")
 
-    weak = one_pager.low_confidence_fields()
+    weak = faq.low_confidence_fields()
     if weak:
         console.print(
             f"[yellow]{len(weak)} field(s) below the confidence threshold:[/yellow] "
             f"{escape(', '.join(sorted(weak)))}"
         )
-    if not one_pager.is_pitch_deck:
+    if not faq.is_pitch_deck:
         err_console.print("[yellow]This document does not read as a pitch deck.[/yellow]")
 
     console.print(f"[green]wrote[/green] {destination}")
-    console.print(f"[dim]{cost_line(one_pager, time.monotonic() - started)}[/dim]")
+    console.print(f"[dim]{cost_line(faq, time.monotonic() - started)}[/dim]")
 
 @app.command()
 def redraw(
-    one_pager: Annotated[
-        Path, typer.Argument(help="Path to a one-pager JSON file written by `extract`.")
+    faq: Annotated[
+        Path, typer.Argument(help="Path to a FAQ JSON file written by `extract`.")
     ],
     out: Annotated[
         Path | None,
@@ -425,49 +421,47 @@ def redraw(
     ] = DEFAULT_MIN_CONFIDENCE,
     engine: EngineOpt = None,
 ) -> None:
-    """Render the one-pager PDF from an existing one-pager JSON. No model call.
+    """Render the FAQ PDF from an existing FAQ JSON. No model call.
 
     The fast loop for layout work: re-rendering costs nothing, so the page can be
     iterated on without paying for an extraction each time.
     """
     import json
 
-    from deckpager.models import OnePager
-    from deckpager.render.onepager import fit_and_render
+    from deckpager.models import Faq
+    from deckpager.render.base import default_engine
 
     try:
-        payload = json.loads(one_pager.read_text(encoding="utf-8"))
+        payload = json.loads(faq.read_text(encoding="utf-8"))
     except OSError as exc:
-        err_console.print(f"[bold red]error:[/bold red] Could not read {one_pager}: {exc}")
+        err_console.print(f"[bold red]error:[/bold red] Could not read {faq}: {exc}")
         raise typer.Exit(code=EXIT_BAD_INPUT) from exc
     except json.JSONDecodeError as exc:
-        err_console.print(f"[bold red]error:[/bold red] {one_pager.name} is not valid JSON: {exc}")
+        err_console.print(f"[bold red]error:[/bold red] {faq.name} is not valid JSON: {exc}")
         raise typer.Exit(code=EXIT_BAD_INPUT) from exc
 
     try:
-        document = OnePager.model_validate(payload)
+        document = Faq.model_validate(payload)
     except ValidationError as exc:
         err_console.print(
-            f"[bold red]error:[/bold red] {one_pager.name} is not a deckpager one-pager "
+            f"[bold red]error:[/bold red] {faq.name} is not a deckpager FAQ "
             f"({exc.error_count()} schema problem(s)). Re-run `deckpager extract`."
         )
         raise typer.Exit(code=EXIT_BAD_INPUT) from exc
 
-    destination = out or one_pager.with_name(f"{one_pager.stem}.pdf")
+    destination = out or faq.with_name(f"{faq.stem}.pdf")
     try:
-        written, cuts = fit_and_render(
+        renderer = get_engine(engine) if engine else default_engine()
+        written = renderer.render(
             document,
             destination,
             paper=_paper(paper),
             threshold=min_confidence,
-            renderer=get_engine(engine) if engine else None,
         )
     except DeckpagerError as exc:
         _fail(exc)
         return
 
-    for cut in cuts:
-        console.print(f"[yellow]fitted:[/yellow] {escape(cut)}")
     console.print(f"[green]wrote[/green] {written}")
 
 @app.command()
@@ -477,7 +471,7 @@ def schema(
         typer.Option("--indent", help="JSON indentation. 0 prints one line."),
     ] = 2,
 ) -> None:
-    """Print the JSON schema the model is held to when extracting a one-pager."""
+    """Print the JSON schema the model is held to when extracting a FAQ."""
     import json
 
     from deckpager.models import tool_schema

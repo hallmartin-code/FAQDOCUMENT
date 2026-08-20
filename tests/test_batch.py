@@ -23,7 +23,7 @@ from deckpager.extract.prompts import LANGUAGE_RULE, SYSTEM_PROMPT, build_user_b
 from deckpager.ingest import ingest_deck
 from deckpager.pipeline import find_decks, run_batch
 from deckpager.render.base import ENGINE_NAMES, Renderer, WeasyPrintEngine, get_engine
-from deckpager.render.onepager import OnePagerRenderer
+from deckpager.render.faq import FaqRenderer
 
 FIXTURES = Path(__file__).parent / "fixtures"
 runner = CliRunner()
@@ -31,7 +31,7 @@ runner = CliRunner()
 
 @pytest.fixture
 def payload() -> dict[str, Any]:
-    data = json.loads((FIXTURES / "sample_onepager.json").read_text(encoding="utf-8"))
+    data = json.loads((FIXTURES / "sample_faq.json").read_text(encoding="utf-8"))
     data.pop("provenance")
     return data
 
@@ -69,7 +69,7 @@ class TestFindDecks:
 
 
 class TestBatch:
-    def test_every_deck_produces_a_one_pager(
+    def test_every_deck_produces_a_faq(
         self, deck_dir: Path, tmp_path: Path, settings: Settings, payload: dict[str, Any]
     ) -> None:
         report = run_batch(
@@ -115,7 +115,7 @@ class TestBatch:
         assert report.exit_code == EXIT_BAD_INPUT
 
     def test_the_worst_failure_wins_the_exit_code(
-        self, deck_dir: Path, tmp_path: Path, settings: Settings
+        self, deck_dir: Path, tmp_path: Path, settings: Settings, payload: dict[str, Any]
     ) -> None:
         """A config problem must not be hidden behind a merely unreadable deck."""
 
@@ -128,13 +128,13 @@ class TestBatch:
             deck_dir,
             settings=settings,
             out_dir=tmp_path / "out",
-            extractor=Failing({}),
+            extractor=Failing(payload),
             cache=ExtractionCache(tmp_path / "cache"),
         )
         assert report.exit_code == EXIT_RENDER_FAILED
 
     def test_an_unexpected_error_is_contained_to_its_deck(
-        self, deck_dir: Path, tmp_path: Path, settings: Settings
+        self, deck_dir: Path, tmp_path: Path, settings: Settings, payload: dict[str, Any]
     ) -> None:
         class Exploding(FakeExtractor):
             def extract(self, deck: Any) -> Any:
@@ -144,7 +144,7 @@ class TestBatch:
             deck_dir,
             settings=settings,
             out_dir=tmp_path / "out",
-            extractor=Exploding({}),
+            extractor=Exploding(payload),
             cache=ExtractionCache(tmp_path / "cache"),
         )
         assert len(report.failed) == 3
@@ -153,7 +153,7 @@ class TestBatch:
     def test_outputs_are_named_for_the_company_not_the_upload(
         self, deck_dir: Path, tmp_path: Path, settings: Settings, payload: dict[str, Any]
     ) -> None:
-        """Three decks land in one folder; `alpha-onepager.pdf` is not findable there."""
+        """Three decks land in one folder; `alpha-faq.pdf` is not findable there."""
         out = tmp_path / "out"
         run_batch(
             deck_dir,
@@ -162,7 +162,7 @@ class TestBatch:
             extractor=FakeExtractor(payload),
             cache=ExtractionCache(tmp_path / "cache"),
         )
-        assert (out / "Helion_Bio-onepager.pdf").is_file()
+        assert (out / "Helion_Bio-FAQ.pdf").is_file()
 
     def test_two_decks_from_one_company_do_not_overwrite_each_other(
         self, deck_dir: Path, tmp_path: Path, settings: Settings, payload: dict[str, Any]
@@ -183,7 +183,7 @@ class TestBatch:
         assert len(pdfs) == 3, pdfs
         assert len(set(pdfs)) == 3
         # The undisambiguated name goes to whichever deck got there first.
-        assert "Helion_Bio-onepager.pdf" in pdfs
+        assert "Helion_Bio-FAQ.pdf" in pdfs
         assert all(p.stat().st_size > 0 for p in out.glob("*.pdf"))
 
     def test_the_json_matches_its_pdf(
@@ -295,7 +295,7 @@ class TestBatchCli:
 
 class TestEngineSeam:
     def test_the_reportlab_engine_satisfies_the_protocol(self) -> None:
-        assert isinstance(OnePagerRenderer(), Renderer)
+        assert isinstance(FaqRenderer(), Renderer)
 
     def test_the_weasyprint_engine_satisfies_the_protocol(self) -> None:
         """It refuses to render, but it must still be a renderer to be selectable."""
@@ -320,18 +320,18 @@ class TestEngineSeam:
     def test_asking_for_weasyprint_refuses_with_the_reason(
         self, tmp_path: Path
     ) -> None:
-        from deckpager.models import OnePager
+        from deckpager.models import Faq
 
-        one_pager = OnePager.model_validate(
-            json.loads((FIXTURES / "sample_onepager.json").read_text(encoding="utf-8"))
+        faq = Faq.model_validate(
+            json.loads((FIXTURES / "sample_faq.json").read_text(encoding="utf-8"))
         )
         with pytest.raises(RenderError, match="not available"):
-            WeasyPrintEngine().render(one_pager, tmp_path / "out.pdf")
+            WeasyPrintEngine().render(faq, tmp_path / "out.pdf")
 
     def test_the_cli_refuses_an_unknown_engine(self, sample_pdf: Path, tmp_path: Path) -> None:
         result = runner.invoke(
             app,
-            ["redraw", str(FIXTURES / "sample_onepager.json"), "-o", str(tmp_path / "x.pdf"),
+            ["redraw", str(FIXTURES / "sample_faq.json"), "-o", str(tmp_path / "x.pdf"),
              "--engine", "postscript"],
         )
         assert result.exit_code == EXIT_RENDER_FAILED
@@ -339,7 +339,7 @@ class TestEngineSeam:
     def test_redraw_honours_the_reportlab_engine(self, tmp_path: Path) -> None:
         result = runner.invoke(
             app,
-            ["redraw", str(FIXTURES / "sample_onepager.json"), "-o", str(tmp_path / "x.pdf"),
+            ["redraw", str(FIXTURES / "sample_faq.json"), "-o", str(tmp_path / "x.pdf"),
              "--engine", "reportlab"],
         )
         assert result.exit_code == 0
@@ -360,7 +360,7 @@ class TestLanguageRule:
         text = "".join(b.get("text", "") for b in blocks if b["type"] == "text")
         assert LANGUAGE_RULE in text
 
-    def test_the_rule_asks_for_the_language_in_missing_information(self) -> None:
+    def test_the_rule_asks_for_the_language_in_a_note(self) -> None:
         """Spec §11: proceed, and note the language in missing_information."""
-        assert "missing_information" in LANGUAGE_RULE
+        assert "note field" in LANGUAGE_RULE
         assert "English" in LANGUAGE_RULE

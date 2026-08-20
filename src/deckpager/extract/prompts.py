@@ -1,9 +1,12 @@
 """The system prompt, the deck payload, and the correction turn.
 
-The system prompt is the one in spec §8, reproduced verbatim. It is kept here as a module
-constant rather than in an editable file because the spec calls it out as verbatim text and
-because it is hashed into the cache key — an edit has to invalidate cached extractions, and
-a constant beside the code that hashes it is harder to change by accident.
+The prompt is a module constant rather than an editable file because it is hashed into the
+cache key — an edit has to invalidate cached extractions, and a constant beside the code
+that hashes it is harder to change by accident.
+
+The questions themselves live in `deckpager.questions` and are rendered into the user
+message, not the system prompt: they change more often than the rules for answering them,
+and the rules are what must stay stable.
 """
 
 from __future__ import annotations
@@ -11,41 +14,50 @@ from __future__ import annotations
 from typing import Any
 
 from deckpager.ingest.models import Deck
+from deckpager.questions import QUESTIONS
 
 #: The only way the model may answer. Named for what it does, because the name is the last
 #: thing the model reads before it starts writing.
-TOOL_NAME = "submit_one_pager"
+TOOL_NAME = "submit_faq"
 
 TOOL_DESCRIPTION = (
-    "Submit the completed one-page summary of this pitch deck. This is the only way to "
-    "return your analysis; every field is validated on receipt, and every populated field "
-    "must carry the slide numbers it came from."
+    "Submit the completed investor FAQ for this document. This is the only way to return "
+    "your analysis. Every answer is validated on receipt: all twenty question ids must be "
+    "present exactly once, and every answer that is not null must carry the slide numbers "
+    "it came from."
 )
 
-#: Spec §8, verbatim.
 SYSTEM_PROMPT = """\
-You are an investment analyst at TEN Capital extracting structured data from a startup pitch \
-deck for an internal one-page summary.
+You are an investment analyst at TEN Capital. You are given a startup pitch deck or company
+document, and you answer a fixed set of twenty diligence questions about it for an internal
+investor FAQ.
 
 Rules:
 
-- Extract only what the deck states or directly implies. If a field is not supported by the \
-deck, set value to null and confidence to 0. Never guess a number, a valuation, a customer \
-count, or a name.
-- For every populated field, record the 1-based slide numbers it came from in source_slides.
-- confidence reflects how explicitly the deck supports the value: 0.9-1.0 stated verbatim; \
-0.6-0.89 stated but ambiguous or split across slides; 0.3-0.59 inferred from context; below \
-0.3 - prefer null.
-- Normalize currency to integer USD ($1.2M -> 1200000). If the deck uses another currency, \
-keep the value and note the currency in note; do not convert.
-- Preserve the founders' own framing in problem and solution - compress, do not editorialize. \
-Respect the stated character limits.
-- key_strengths, key_risks, and missing_information are your analysis, not the deck's claims. \
-Risks must be specific to this company - reject generic risks like "execution risk" or \
-"competitive market". missing_information lists diligence items a partner would need before \
-an investment committee discussion.
-- If the document is not a pitch deck, set company_name.value to null and put "Document does \
-not appear to be a pitch deck" as the only entry in missing_information.\
+- Answer only from the document. If it does not address a question, set that answer's value
+to null and confidence to 0. Never guess a number, a valuation, a customer count, a name,
+or a date. An unanswered question is a finding a partner needs, not a gap to paper over.
+- Answer every one of the twenty questions. You may not drop, merge, or reword a question
+because the document is thin on it.
+- For every answer that is not null, record the 1-based slide or section numbers it came
+from in source_slides.
+- confidence reflects how explicitly the document supports the answer: 0.9-1.0 stated
+verbatim; 0.6-0.89 stated but ambiguous or split across slides; 0.3-0.59 inferred from
+context; below 0.3 - prefer null.
+- Write each answer as prose a partner can read aloud in a meeting: two to five sentences,
+specific, with the document's own figures and units. Keep the currency the document used
+and do not convert it.
+- Carry the founders' framing without adopting their salesmanship. Report a claim as a
+claim: "the deck states", "the deck projects". Do not repeat an adjective the document has
+not evidenced.
+- Where the document contradicts itself, say so in the answer and cite both slides. A
+contradiction between two slides is one of the most useful things this FAQ can surface.
+- One question asks what material risk the document leaves unaddressed. That answer is
+your analysis rather than the document's claims, and it must be specific to this company -
+reject generic risks like "execution risk" or "competitive market".
+- If the document is not a pitch deck or company document, set company_name to null, put
+"Document does not appear to be a pitch deck" in not_a_pitch_deck_reason, and leave every
+answer null.\
 """
 
 
@@ -54,11 +66,30 @@ not appear to be a pitch deck" as the only entry in missing_information.\
 #: about language, so the instruction goes in the user message instead: the two sections
 #: are only satisfiable together if it lives in the half that is not verbatim.
 LANGUAGE_RULE = (
-    "If this deck is not written in English, analyze it exactly as you would an English "
-    "deck, write the summary in English, and add one entry to missing_information naming "
-    "the language, in the form: Deck is written in <language>; figures and claims were "
-    "read in translation."
+    "If this document is not written in English, analyze it exactly as you would an "
+    "English one and write every answer in English. Name the language in the note field "
+    "of the first answer, in the form: Document is written in <language>; figures and "
+    "claims were read in translation."
 )
+
+
+def question_brief() -> str:
+    """The twenty questions and what a complete answer to each contains.
+
+    Rendered into the user message rather than the system prompt: the questions are the
+    variable part of this job and the rules for answering them are the stable part, and
+    the stable half is what benefits from sitting still.
+    """
+    lines: list[str] = []
+    stage = ""
+    for question in QUESTIONS:
+        if question.stage != stage:
+            stage = question.stage
+            lines.append(f"\n[{stage}]")
+        lines.append(f"  {question.id}: {question.text}")
+        lines.append(f"      A complete answer covers: {question.guidance}")
+    return chr(10).join(lines).strip()
+
 
 def system_blocks() -> list[dict[str, Any]]:
     """The system prompt as content blocks.
@@ -148,7 +179,7 @@ def build_user_blocks(deck: Deck) -> list[dict[str, Any]]:
             f"memo, or similar), split into {deck.slide_count} numbered sections at its "
             f"headings. It is not a slide deck. Record section numbers in `source_slides` "
             f"- that field carries whatever unit this source is numbered in. Then call "
-            f"`{TOOL_NAME}` exactly once with the one-page summary.\n\n"
+            f"`{TOOL_NAME}` exactly once with the completed FAQ.\n\n"
             f"{LANGUAGE_RULE}"
             f"\n\n{slide_text(deck)}"
         )
@@ -156,10 +187,14 @@ def build_user_blocks(deck: Deck) -> list[dict[str, Any]]:
         instruction = (
             f"Here is {deck.source_path.name}, a {deck.slide_count}-slide pitch deck. "
             f"The extracted text of every slide follows. Read it together with the attached "
-            f"pages, then call `{TOOL_NAME}` exactly once with the one-page summary.\n\n"
+            f"pages, then call `{TOOL_NAME}` exactly once with the completed FAQ.\n\n"
             f"{LANGUAGE_RULE}"
             f"\n\n{slide_text(deck)}"
         )
+    instruction += (
+        "\n\nAnswer these twenty questions, using the id shown for each:\n\n"
+        + question_brief()
+    )
     blocks.append({"type": "text", "text": instruction})
     return blocks
 

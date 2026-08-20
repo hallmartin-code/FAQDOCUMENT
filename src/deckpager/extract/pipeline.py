@@ -12,7 +12,7 @@ from deckpager.errors import IngestError
 from deckpager.extract.client import AnthropicExtractor, Extraction, Extractor, Usage
 from deckpager.extract.prompts import SYSTEM_PROMPT
 from deckpager.ingest import ingest_deck
-from deckpager.models import OnePager, OnePagerDraft, Provenance, tool_schema
+from deckpager.models import Faq, FaqDraft, Provenance, tool_schema
 
 #: Called with a short label as each stage begins, so a caller can show real progress.
 StageHook = Callable[[str], None]
@@ -34,7 +34,7 @@ def cache_options(settings: Settings) -> dict[str, object]:
     }
 
 
-def check_citations(draft: OnePagerDraft, slide_count: int) -> list[str]:
+def check_citations(draft: FaqDraft, slide_count: int) -> list[str]:
     """Report any slide citation that does not point at a slide in this deck.
 
     The schema can enforce that a citation is a positive integer; it cannot know how many
@@ -49,7 +49,7 @@ def check_citations(draft: OnePagerDraft, slide_count: int) -> list[str]:
         f"Treat the fields citing them with care."
     ]
 
-def extract_one_pager(
+def extract_faq(
     deck_path: Path,
     *,
     settings: Settings,
@@ -59,7 +59,7 @@ def extract_one_pager(
     now: datetime | None = None,
     on_stage: StageHook | None = None,
     on_retry: Callable[[str], None] | None = None,
-) -> OnePager:
+) -> Faq:
     """Ingest a deck, extract it (or read the cache), and stamp the result with provenance."""
     stage = on_stage or (lambda _name: None)
 
@@ -86,7 +86,7 @@ def extract_one_pager(
         stage("cached")
         # Validated on the way out, not trusted because it is ours: a record written by an
         # older build can satisfy the version check and still not fit today's schema.
-        result = Extraction(draft=OnePagerDraft.model_validate(cached), usage=Usage())
+        result = Extraction(draft=FaqDraft.model_validate(cached), usage=Usage())
         was_cached = True
     else:
         stage("extracting")
@@ -107,12 +107,12 @@ def extract_one_pager(
         ingest_warnings=list(deck.warnings),
         citation_warnings=check_citations(result.draft, deck.slide_count),
     )
-    return OnePager.from_draft(result.draft, provenance)
+    return Faq.from_draft(result.draft, provenance)
 
 
-def cost_line(one_pager: OnePager, seconds: float) -> str:
+def cost_line(faq: Faq, seconds: float) -> str:
     """The spec §10 success line: how long, how many tokens, roughly how much."""
-    provenance = one_pager.provenance
+    provenance = faq.provenance
     if provenance.cached:
         return f"Read from cache in {seconds:.1f}s · no tokens spent"
     cost = provenance.estimated_cost_usd
