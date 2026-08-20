@@ -44,3 +44,15 @@ max_image_bytes = 5_000_000
 # Skip rasterizing slides entirely and analyze text only. Cheaper and faster, but blind
 # to charts, logos, and anything else the extractor cannot turn into text.
 no_images = false
+
+
+[email]
+# Where each generated one-pager is sent. Sending is off unless RESEND_API_KEY is set
+# in the environment; this address alone does nothing.
+to = "Info@tencapital.group"
+
+# Sender address. Must be on a domain verified with Resend, or Resend rejects the send.
+from_address = "deckpager@tencapital.group"
+
+# Attach the extraction JSON alongside the PDF.
+attach_json = true

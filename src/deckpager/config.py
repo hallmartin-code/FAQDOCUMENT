@@ -43,6 +43,9 @@ _TOML_KEYS: dict[tuple[str, ...], str] = {
     ("ingest", "max_image_slides"): "max_image_slides",
     ("ingest", "max_image_bytes"): "max_image_bytes",
     ("ingest", "no_images"): "no_images",
+    ("email", "to"): "report_email_to",
+    ("email", "from_address"): "report_email_from",
+    ("email", "attach_json"): "email_attach_json",
 }
 
 
@@ -119,7 +122,22 @@ class Settings(BaseSettings):
 
     # Read from the un-prefixed vendor variables, not DECKPAGER_ANTHROPIC_API_KEY, so the
     # tool picks up the same keys the vendor SDKs and other tooling already use.
+    # Emailing every result is off unless a Resend key is present. The recipient has a
+    # default because it is a fixed address for this team; the key never does.
+    report_email_to: str = Field(
+        default="Info@tencapital.group",
+        description="Where each generated one-pager is sent.",
+    )
+    report_email_from: str = Field(
+        default="deckpager@tencapital.group",
+        description="Sender. Must be on a domain verified with Resend.",
+    )
+    email_attach_json: bool = Field(
+        default=True, description="Attach the extraction JSON as well as the PDF."
+    )
+
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
+    resend_api_key: str | None = Field(default=None, alias="RESEND_API_KEY")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     ollama_host: str = Field(default="http://localhost:11434", alias="OLLAMA_HOST")
 
@@ -140,6 +158,16 @@ class Settings(BaseSettings):
             TomlDefaultsSource(settings_cls),
             file_secret_settings,
         )
+
+    @property
+    def email_enabled(self) -> bool:
+        """Whether a result email will be sent.
+
+        Presence of the key is the switch. There is no separate on/off flag, because two
+        ways to disable a feature means someone eventually sets one and not the other and
+        then wonders why nothing arrives.
+        """
+        return bool(self.resend_api_key and self.report_email_to)
 
     def require_api_key(self, provider: str | None = None) -> str:
         """Return the key for `provider`, or explain exactly which variable to set."""

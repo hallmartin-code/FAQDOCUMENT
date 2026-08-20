@@ -51,6 +51,7 @@ deckpager render DECK   Deck -> one-pager PDF and JSON. The main command.
         --no-cache          Ignore the extraction cache and pay for a fresh call
         --no-images         Skip slide rasterization
         --dry-run           Parse and report only. No model call, no cost.
+        --no-email          Do not email the result, even when configured
     -v, --verbose           Full traceback on failure
 
 deckpager extract DECK  Extraction only, no PDF.
@@ -148,6 +149,47 @@ Two things to know about the deployed environment:
 
 ---
 
+## Emailing each result
+
+Every generated one-pager can be emailed automatically, with the PDF and the extraction
+JSON attached. The body carries the ask, the strengths, the risks, and the diligence
+requests, plus anything the run flagged or truncated — enough to triage from the inbox
+without opening the attachment.
+
+It is **off until `RESEND_API_KEY` is set.** There is no separate on/off switch, because
+two ways to disable a feature means someone eventually sets one and not the other and
+then wonders why nothing arrives.
+
+### Setting it up
+
+1. Create an API key at [resend.com/api-keys](https://resend.com/api-keys) with
+   **Sending access**.
+2. **Verify the sending domain.** In Resend, add `tencapital.group` under Domains and
+   publish the DNS records it gives you (an MX and two TXT records, for DKIM and SPF).
+   Until this is done Resend rejects every send from `@tencapital.group` — the error is
+   reported back to you, but nothing arrives.
+3. Set the key locally in `.env`, and on Railway as a service variable:
+
+   ```
+   RESEND_API_KEY=re_...
+   ```
+
+4. `deckpager check` will then report the feature as on and name the recipient.
+
+To try it before the domain is verified, set
+`DECKPAGER_REPORT_EMAIL_FROM=onboarding@resend.dev`. Resend's shared sender only
+delivers to the address that owns the Resend account, so it proves the wiring works and
+nothing more.
+
+### What happens when it fails
+
+Nothing else does. The PDF is the product and the email is a notification about it, so a
+failed send is reported — on the CLI, in the browser, and in the job payload — and the
+run still succeeds with its artifacts on disk. `--no-email` suppresses sending for a
+single run.
+
+---
+
 ## Configuration
 
 Every setting resolves highest-precedence first: CLI flag → environment → `.env` →
@@ -162,6 +204,9 @@ Every setting resolves highest-precedence first: CLI flag → environment → `.
 | `DECKPAGER_MAX_IMAGE_SLIDES` | `25` | How many leading slides may carry an image |
 | `DECKPAGER_MAX_IMAGE_BYTES` | `5000000` | Total image budget per request |
 | `DECKPAGER_CACHE_DIR` | platform cache dir | Where extractions are cached |
+| `RESEND_API_KEY` | — | Set it to email every result. Unset means nothing is emailed. |
+| `DECKPAGER_REPORT_EMAIL_TO` | `Info@tencapital.group` | Recipient(s), comma-separated |
+| `DECKPAGER_REPORT_EMAIL_FROM` | `deckpager@tencapital.group` | Sender; must be on a Resend-verified domain |
 
 Secrets come from the environment or `.env` only. `.env` is gitignored; the API key is never
 written to a tracked file, never logged, and never printed — `deckpager check` reports that a

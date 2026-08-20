@@ -737,3 +737,55 @@ The extraction cache is per-container, so the first run of a deck after a redepl
 full price; a mounted volume plus DECKPAGER_CACHE_DIR fixes it if that matters. And .ppt
 will not convert, because the Nixpacks image has no LibreOffice. Both are in the README
 rather than left to be discovered.
+
+---
+
+## deckpager - Emailing each result
+
+### DP45. A second network call, requested and recorded
+
+Spec 3 says no network calls except to the Anthropic API. Emailing results is a second
+one, asked for deliberately. It is confined to mailer.py, it is off unless a key is set,
+and it happens after both artifacts are already on disk. Recording it here rather than
+quietly widening the constraint.
+
+### DP46. urllib, not the resend SDK
+
+Resend API is a single JSON POST. Spec 14 says prefer stdlib and ask before adding a
+dependency, and urllib does this in twenty lines with no new package to install, pin, or
+audit. The SDK is the better choice the day this needs batching, tags, or webhooks.
+
+### DP47. The key is the switch
+
+No separate enable flag. Sending is on when RESEND_API_KEY and a recipient are both
+present, and off otherwise. Two ways to disable one feature means someone eventually sets
+one and not the other and then spends an afternoon wondering why nothing arrives.
+
+The recipient has a default (Info@tencapital.group) because it is a fixed address for
+this team. The key never has a default.
+
+### DP48. A failed send must never fail a run
+
+The PDF is the product. The email is a notification about the product, and a notification
+that could destroy the thing it notifies you about would be a bad trade. So: mailer.send
+catches everything and returns an EmailOutcome rather than raising, the send happens after
+both artifacts are written, and the CLI, the browser, and the job payload all report the
+failure without changing the exit code.
+
+The pipeline also wraps the call in its own try/except. mailer.send promises never to
+raise; a promise is not a guarantee, and a bug in it would otherwise destroy a run that
+had already succeeded and already been paid for. Verified against a live 403 from Resend:
+warning printed, both files written, exit 0.
+
+### DP49. The email body is escaped, because it is model output
+
+A company name reaches the HTML from an extraction, which reaches it from a founder PDF.
+Every interpolated value goes through html.escape. A test puts a script tag in the company
+name and asserts it comes out inert.
+
+### DP50. Sending will not work until the domain is verified
+
+Resend rejects any send from an unverified domain, so tencapital.group needs its DNS
+records published before anything arrives. The rejection is reported back with Resend own
+explanation, which is the only place that particular failure is legible. The README says
+so, and names onboarding@resend.dev as the way to test the wiring first.

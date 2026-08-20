@@ -98,6 +98,19 @@ def check_api_key(settings: Settings) -> CheckResult:
     return CheckResult("anthropic api key", Status.OK, f"set (from {source})")
 
 
+def check_email(settings: Settings) -> CheckResult:
+    """Report whether results are emailed, and to whom. Never prints the Resend key."""
+    from deckpager.mailer import describe
+
+    summary = describe(settings)
+    status = Status.OK if settings.email_enabled else Status.WARN
+    fix = (
+        None
+        if settings.email_enabled
+        else "Set RESEND_API_KEY to email each result. The sending domain must be verified with Resend."
+    )
+    return CheckResult("result email", status, summary, fix)
+
 def check_reportlab() -> CheckResult:
     """The default render engine. Pure Python, so this is an import check."""
     from deckpager.render import OnePagerRenderer
@@ -193,6 +206,7 @@ def run_checks(settings: Settings) -> list[CheckResult]:
         check_api_key(settings),
         *check_data_dirs(),
         check_cache(),
+        check_email(settings),
         check_reportlab(),
         check_weasyprint(),
         check_soffice(),

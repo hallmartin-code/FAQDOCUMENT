@@ -131,7 +131,8 @@ const STAGES = {
   ingesting:  ["Reading the deck",   15],
   extracting: ["Analysing the deck", 45],
   cached:     ["Found in cache",     90],
-  rendering:  ["Laying out the page",90],
+  rendering:  ["Laying out the page",88],
+  emailing:   ["Emailing the result",95],
   done:       ["Done",              100],
   failed:     ["Failed",            100],
 };
@@ -193,6 +194,7 @@ function paint(job) {
   if (!job.is_pitch_deck) note("This document does not read as a pitch deck.", true);
   (job.warnings || []).forEach(w => note(w, true));
   (job.truncations || []).forEach(t => note(t + " (to keep it to one page)"));
+  if (job.emailed) note(job.emailed);
   if (job.flagged && job.flagged.length) {
     note(`${job.flagged.length} field(s) below the confidence threshold: ${job.flagged.join(", ")}`);
   }

@@ -17,6 +17,7 @@ from deckpager.cache import ExtractionCache
 from deckpager.config import Settings
 from deckpager.extract.client import Extractor
 from deckpager.extract.pipeline import cost_line, extract_one_pager
+from deckpager.mailer import EmailOutcome
 from deckpager.models import DEFAULT_MIN_CONFIDENCE, OnePager
 from deckpager.render.onepager import Paper, fit_and_render
 
@@ -33,6 +34,7 @@ class RunResult:
     json: Path
     seconds: float = 0.0
     truncations: list[str] = field(default_factory=list)
+    email: EmailOutcome | None = None
 
     @property
     def summary(self) -> str:
@@ -66,6 +68,7 @@ def run(
     now: datetime | None = None,
     on_stage: StageHook | None = None,
     on_retry: Callable[[str], None] | None = None,
+    send_email: bool = True,
 ) -> RunResult:
     """Ingest, extract, render. Returns the artifacts and what the run cost."""
     started = time.monotonic()
@@ -98,10 +101,30 @@ def run(
     json_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_text(one_pager.model_dump_json(indent=2) + "\n", encoding="utf-8")
 
-    return RunResult(
+    result = RunResult(
         one_pager=one_pager,
         pdf=pdf_path,
         json=json_path,
         seconds=time.monotonic() - started,
         truncations=list(truncations),
     )
+
+    # Last, and never fatal. The PDF is the product; the email is a notification about
+    # it, and a notification that could fail the run it reports on would be a bad trade.
+    if send_email and settings.email_enabled:
+        from deckpager import mailer
+
+        stage("emailing")
+        try:
+            result.email = mailer.send(
+                one_pager, result, settings, threshold=min_confidence
+            )
+        except Exception as exc:  # noqa: BLE001 - see below
+            # mailer.send promises never to raise, and a promise is not a guarantee: a
+            # bug in it would otherwise destroy a run that has already succeeded and
+            # already been paid for. The artifacts are on disk by this point.
+            result.email = EmailOutcome(
+                sent=False, detail=f"Emailing the result raised {type(exc).__name__}: {exc}"
+            )
+
+    return result

@@ -58,7 +58,9 @@ MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "25"))
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 WEB_DIR = Path(__file__).parent / "web"
 
-Stage = Literal["queued", "ingesting", "extracting", "cached", "rendering", "done", "failed"]
+Stage = Literal[
+    "queued", "ingesting", "extracting", "cached", "rendering", "emailing", "done", "failed"
+]
 
 _basic = HTTPBasic(auto_error=False)
 _semaphore = asyncio.Semaphore(MAX_CONCURRENT)
@@ -80,6 +82,7 @@ class Job:
     truncations: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     is_pitch_deck: bool = True
+    emailed: str | None = None
 
     @property
     def directory(self) -> Path:
@@ -99,6 +102,7 @@ class Job:
             "truncations": self.truncations,
             "warnings": self.warnings,
             "is_pitch_deck": self.is_pitch_deck,
+            "emailed": self.emailed,
         }
 
 
@@ -202,6 +206,8 @@ def _run_job(job: Job, deck_path: Path, paper: str, min_confidence: float) -> No
             one_pager.provenance.citation_warnings
         )
         job.is_pitch_deck = one_pager.is_pitch_deck
+        if result.email is not None:
+            job.emailed = result.email.detail
         job.stage = "done"
     except DeckpagerError as exc:
         job.stage, job.error = "failed", str(exc)

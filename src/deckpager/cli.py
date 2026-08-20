@@ -65,6 +65,13 @@ DryRunOpt = Annotated[
         help="Parse the deck and print what was read. No model call, no cost.",
     ),
 ]
+NoEmailOpt = Annotated[
+    bool,
+    typer.Option(
+        "--no-email",
+        help="Do not email the result, even when RESEND_API_KEY is set.",
+    ),
+]
 NoCacheOpt = Annotated[
     bool,
     typer.Option(
@@ -170,6 +177,7 @@ def render(
         typer.Option("--min-confidence", help="Below this, a field is flagged."),
     ] = DEFAULT_MIN_CONFIDENCE,
     no_images: NoImagesOpt = False,
+    no_email: NoEmailOpt = False,
     dry_run: DryRunOpt = False,
     verbose: Annotated[
         bool,
@@ -198,6 +206,7 @@ def render(
             use_cache=not no_cache,
             on_stage=lambda name: console.print(f"[dim]{name}[/dim] {deck.name}"),
             on_retry=_announce_schema_retry,
+            send_email=not no_email,
         )
     except DeckpagerError as exc:
         if verbose:
@@ -231,6 +240,11 @@ def _report(result: RunResult, min_confidence: float) -> None:
 
     console.print(f"[green]wrote[/green] {result.pdf}")
     console.print(f"[green]wrote[/green] {result.json}")
+    if result.email is not None:
+        if result.email.sent:
+            console.print(f"[green]sent[/green] {escape(result.email.detail)}")
+        else:
+            err_console.print(f"[yellow]email:[/yellow] {escape(result.email.detail)}")
     console.print(f"[dim]{result.summary}[/dim]")
 
 @app.command()

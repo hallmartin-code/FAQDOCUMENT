@@ -60,6 +60,7 @@ def stub_run(monkeypatch: pytest.MonkeyPatch, module: Any, **overrides: Any) -> 
             json=js,
             truncations=overrides.get("truncations", []),
             summary="Extracted in 8.2s · 24,310 in / 1,842 out · ~$0.11",
+            email=overrides.get("email"),
         )
 
     import deckpager.pipeline as pipeline
@@ -224,6 +225,37 @@ class TestJobLifecycle:
         wait_for_done(client, job_id)
         assert client.get(f"/api/jobs/{job_id}/docx").status_code == 404
 
+
+class TestEmailReporting:
+    def test_a_send_is_reported_to_the_browser(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from deckpager.mailer import EmailOutcome
+
+        stub_run(
+            monkeypatch,
+            client.module,  # type: ignore[attr-defined]
+            email=EmailOutcome(sent=True, detail="emailed to Info@tencapital.group"),
+        )
+        payload = wait_for_done(client, upload(client).json()["id"])
+        assert payload["emailed"] == "emailed to Info@tencapital.group"
+
+    def test_a_failed_send_is_reported_but_the_job_still_succeeds(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The PDF is the product; the email is a notification about it."""
+        from deckpager.mailer import EmailOutcome
+
+        stub_run(
+            monkeypatch,
+            client.module,  # type: ignore[attr-defined]
+            email=EmailOutcome(sent=False, detail="Resend rejected the message (403)"),
+        )
+        job_id = upload(client).json()["id"]
+        payload = wait_for_done(client, job_id)
+        assert payload["stage"] == "done"
+        assert "403" in payload["emailed"]
+        assert client.get(f"/api/jobs/{job_id}/pdf").status_code == 200
 
 class TestLeakage:
     def test_the_job_payload_carries_no_path_and_no_key(
