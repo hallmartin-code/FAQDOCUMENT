@@ -17,3 +17,6 @@ htmlcov/
 # deckpager
 .deckpager-cache/
 *-onepager.pdf
+
+# Claude Code personal settings
+.claude/settings.local.json
