@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>TEN Capital Network — Deck to Investor FAQ</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='20' r='14' fill='%23F3A22A'/%3E%3Ccircle cx='78' cy='68' r='14' fill='%2335BEBB'/%3E%3Ccircle cx='22' cy='68' r='14' fill='%23EE5A4E'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='10 10 180 180'%3E%3Cg stroke-width='22' stroke-linecap='round' fill='none'%3E%3Cpath d='M22 97.3 A78 78 0 0 1 110.9 22.8' stroke='%23EE5A4E'/%3E%3Cpath d='M141.3 33.9 A78 78 0 0 1 161.5 148' stroke='%23F3A22A'/%3E%3Cpath d='M136.6 168.9 A78 78 0 0 1 27.7 129.2' stroke='%2335BEBB'/%3E%3C/g%3E%3Ccircle cx='79' cy='63.6' r='18' fill='%23EE5A4E'/%3E%3Ccircle cx='142' cy='100' r='18' fill='%23F3A22A'/%3E%3Ccircle cx='79' cy='136.4' r='18' fill='%2335BEBB'/%3E%3C/svg%3E">
 <meta name="theme-color" content="#0B1526">
 <meta name="description" content="Upload a pitch deck and get a twenty-question investor FAQ, analyzed and structured by Claude.">
 <meta property="og:title" content="TEN Capital Network - Deck to Investor FAQ">
@@ -480,13 +480,17 @@
 <div class="stage">
 
   <div class="brand">
-    <svg class="brand-mark" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TEN Capital Network">
-      <path d="M50 6 C64 6 74 16 74 16" stroke="var(--amber)" stroke-width="11" stroke-linecap="round" fill="none"/>
-      <path d="M76 66 C76 82 63 92 63 92" stroke="var(--teal)" stroke-width="11" stroke-linecap="round" fill="none"/>
-      <path d="M24 66 C24 82 37 92 37 92" stroke="var(--coral)" stroke-width="11" stroke-linecap="round" fill="none" transform="rotate(180 50 79)"/>
-      <circle cx="50" cy="20" r="11" fill="var(--amber)"/>
-      <circle cx="78" cy="68" r="11" fill="var(--teal)"/>
-      <circle cx="22" cy="68" r="11" fill="var(--coral)"/>
+    <!-- three figures on a ring: heads 120deg apart, each body a 96deg arc trailing
+         its head by 10deg, matching assets/TEN_Capital_logo_footer.png -->
+    <svg class="brand-mark" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TEN Capital Network">
+      <g stroke-width="22" stroke-linecap="round" fill="none">
+        <path d="M22 97.3 A78 78 0 0 1 110.9 22.8" stroke="var(--coral)"/>
+        <path d="M141.3 33.9 A78 78 0 0 1 161.5 148" stroke="var(--amber)"/>
+        <path d="M136.6 168.9 A78 78 0 0 1 27.7 129.2" stroke="var(--teal)"/>
+      </g>
+      <circle cx="79" cy="63.6" r="18" fill="var(--coral)"/>
+      <circle cx="142" cy="100" r="18" fill="var(--amber)"/>
+      <circle cx="79" cy="136.4" r="18" fill="var(--teal)"/>
     </svg>
     <div class="brand-word">Ten Capital<span>Network</span></div>
   </div>
